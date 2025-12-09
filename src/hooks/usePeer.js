@@ -1,20 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Peer from 'peerjs'
 
-// Simple ID generator for the shorter code
+// Simple ID generator
 function generateShortId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
 
 export function usePeer(mode = 'provider') {
     const [peerId, setPeerId] = useState('')
-    const [connections, setConnections] = useState([]) // Array of data connections
+    const [connections, setConnections] = useState([])
     const [isConnected, setIsConnected] = useState(false)
     const peerRef = useRef(null)
 
     useEffect(() => {
-        // Initialize Peer
-        const peer = new Peer(generateShortId())
+        // Use Public PeerJS Cloud (default)
+        // This ensures it works on Vercel/Production (HTTPS).
+        // No arguments = connect to 0.peerjs.com
+
+        const peer = new Peer(generateShortId(), {
+            debug: 1
+        })
+
         peerRef.current = peer
 
         peer.on('open', (id) => {
@@ -31,14 +37,18 @@ export function usePeer(mode = 'provider') {
             })
 
             conn.on('data', (data) => {
-                // Handle incoming data (images, status updates, etc)
-                // This will need to be passed up via callback or event
                 window.dispatchEvent(new CustomEvent('peer-data', { detail: { data, peerId: conn.peer } }))
             })
 
             conn.on('close', () => {
                 setConnections(prev => prev.filter(c => c.peer !== conn.peer))
             })
+
+            conn.on('error', (err) => console.error("Conn error:", err))
+        })
+
+        peer.on('error', (err) => {
+            console.error('Peer error:', err)
         })
 
         return () => {
@@ -62,18 +72,17 @@ export function usePeer(mode = 'provider') {
 
         conn.on('error', (err) => {
             console.error('Connection error:', err)
+            // Just log, don't alert blocking UI
         })
     }, [])
 
     const sendData = useCallback((data, targetPeerId = null) => {
         if (targetPeerId) {
-            // Send to specific peer
             const conn = connections.find(c => c.peer === targetPeerId)
             if (conn && conn.open) {
                 conn.send(data)
             }
         } else {
-            // Broadcast to all
             connections.forEach(conn => {
                 if (conn.open) {
                     conn.send(data)

@@ -38,11 +38,9 @@ const ReceiverView = () => {
     }, [])
 
     const handleConnect = () => {
-        if (providerCode.length >= 6) {
-            // PeerJS IDs are usually generated fast, but we're assuming the user enters the ID directly
-            // In a robust app we might need a signaling server to map short codes to full PeerIDs, 
-            // but for PeerJS locally we can use the custom short ID approach logic or just type the ID.
-            // For this demo, let's assume the "Code" IS the Peer ID.
+        if (providerCode.length >= 4) {
+            // Accept shorter codes if custom logic used, but simple local ID is usually random.
+            // But we are using generateShortId() which is 6 chars.
             connectToPeer(providerCode.toUpperCase())
         }
     }
@@ -50,7 +48,7 @@ const ReceiverView = () => {
     const startCamera = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' } // Prefer back camera on phones
+                video: { facingMode: 'environment' }
             })
             if (videoRef.current) {
                 videoRef.current.srcObject = stream
@@ -70,7 +68,6 @@ const ReceiverView = () => {
     const takePicture = () => {
         if (!videoRef.current || !canvasRef.current) return
 
-        // Check limit
         if (assignedCell && assignedCell.currentCount >= 4) {
             alert("Maximum 4 images allowed.")
             return
@@ -78,14 +75,32 @@ const ReceiverView = () => {
 
         const video = videoRef.current
         const canvas = canvasRef.current
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+
+        // Resize logic: Max 1024px
+        const MAX_SIZE = 1024
+        let width = video.videoWidth
+        let height = video.videoHeight
+
+        if (width > height) {
+            if (width > MAX_SIZE) {
+                height *= MAX_SIZE / width
+                width = MAX_SIZE
+            }
+        } else {
+            if (height > MAX_SIZE) {
+                width *= MAX_SIZE / height
+                height = MAX_SIZE
+            }
+        }
+
+        canvas.width = width
+        canvas.height = height
 
         const context = canvas.getContext('2d')
-        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+        context.drawImage(video, 0, 0, width, height)
 
-        // Convert to base64
-        const imageData = canvas.toDataURL('image/jpeg', 0.8)
+        // Convert to base64 with moderate quality
+        const imageData = canvas.toDataURL('image/jpeg', 0.6)
 
         // Send to provider
         sendData({
@@ -132,6 +147,7 @@ const ReceiverView = () => {
                     >
                         Connect
                     </button>
+                    <p className="hint">Ensure both devices are on the same WiFi.</p>
                 </div>
             )}
 
@@ -228,6 +244,11 @@ const ReceiverView = () => {
         }
         .connect-btn:disabled {
           opacity: 0.5;
+        }
+        .hint {
+          color: #888;
+          font-size: 12px;
+          margin-top: 16px;
         }
         .camera-interface {
           flex: 1;
