@@ -1,0 +1,369 @@
+:root {
+  /* Light mode (default) */
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-cell: #ffffff;
+  --bg-cell-hover: #f5f5f5;
+  --bg-cell-selected: #e8f4ff;
+  --bg-header: #f6f8fa;
+  --border-color: #e5e7eb;
+  --border-selected: #0070f3;
+  --text-primary: #171717;
+  --text-secondary: #666666;
+  --text-header: #24292f;
+  --fill-handle: #0070f3;
+  --toggle-bg: #e5e7eb;
+  --toggle-knob: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --transition-fast: 150ms;
+  --transition-normal: 200ms;
+  --resize-handle: #d1d5db;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-cell: #0a0a0a;
+  --bg-cell-hover: #1a1a1a;
+  --bg-cell-selected: #0d2847;
+  --bg-header: #141414;
+  --border-color: #2a2a2a;
+  --border-selected: #0070f3;
+  --text-primary: #ededed;
+  --text-secondary: #888888;
+  --text-header: #ededed;
+  --fill-handle: #0070f3;
+  --toggle-bg: #333333;
+  --toggle-knob: #0a0a0a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --resize-handle: #444444;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-x: none;
+  /* Disable swipe nav */
+}
+
+/* App Container */
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+/* Theme Toggle */
+.theme-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle:hover {
+  background: var(--bg-cell-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.theme-toggle svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.theme-toggle:hover svg {
+  color: var(--text-primary);
+}
+
+.theme-toggle:active svg {
+  transform: scale(0.9);
+}
+
+/* Spreadsheet Container */
+.spreadsheet-container {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-primary);
+}
+
+.spreadsheet {
+  display: grid;
+  min-width: max-content;
+  position: relative;
+}
+
+/* Header Row */
+.header-row {
+  display: contents;
+}
+
+.header-cell {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 8px 12px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  user-select: none;
+  white-space: nowrap;
+  transition: background-color var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-cell:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  min-width: 50px;
+  text-align: center;
+  background: var(--bg-header);
+  justify-content: center;
+}
+
+.header-cell-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Column Resize Handle */
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 15;
+  transition: background-color var(--transition-fast);
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: var(--border-selected);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 16px;
+  background: var(--resize-handle);
+  border-radius: 1px;
+  cursor: auto;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.header-cell:hover .resize-handle::after,
+.resize-handle.resizing::after {
+  opacity: 1;
+}
+
+/* Row Number */
+.row-number {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  padding: 0 12px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  min-width: 50px;
+  transition: background-color var(--transition-normal);
+}
+
+/* Data Row */
+.data-row {
+  display: contents;
+}
+
+/* Cell */
+.cell {
+  position: relative;
+  padding: 0;
+  background: var(--bg-cell);
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  cursor: cell;
+  transition: background-color var(--transition-fast);
+}
+
+.cell:hover {
+  background: var(--bg-cell-hover);
+}
+
+.cell.selected {
+  background: var(--bg-cell-selected);
+  outline: 2px solid var(--border-selected);
+  outline-offset: -2px;
+  z-index: 3;
+}
+
+.cell.in-range {
+  background: var(--bg-cell-selected);
+}
+
+/* Cell content with overflow */
+.cell-content {
+  position: relative;
+  height: 100%;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+/* Numeric Alignment */
+.cell.is-number .cell-content {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.cell.is-number .cell-input {
+  text-align: right;
+}
+
+/* Overflow layer - shows content that extends beyond cell */
+.cell-content.has-overflow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: var(--bg-cell);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.cell:hover .cell-content.has-overflow,
+.cell.selected .cell-content.has-overflow {
+  background: inherit;
+}
+
+/* When a cell to the right is selected or hovered, hide overflow */
+.cell.hide-overflow .cell-content.has-overflow {
+  overflow: hidden;
+  width: 100%;
+}
+
+.cell-input {
+  width: 100%;
+  height: 100%;
+  padding: 6px 10px;
+  border: none;
+  outline: none;
+  background: var(--bg-cell);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Fill Handle */
+.fill-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--fill-handle);
+  border: 1px solid var(--bg-primary);
+  border-radius: 1px;
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  z-index: 10;
+}
+
+.cell.selected .fill-handle {
+  opacity: 1;
+}
+
+.fill-handle:hover {
+  transform: scale(1.2);
+}
+
+/* Scrollbar styling */
+.spreadsheet-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.spreadsheet-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.spreadsheet-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.spreadsheet-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Resize cursor when dragging */
+body.col-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.col-resizing * {
+  cursor: col-resize !important;
+}
