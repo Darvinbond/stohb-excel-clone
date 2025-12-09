@@ -1,20 +1,42 @@
-const { PeerServer } = require('peer');
+import { createServer } from "http";
+import { Server } from "socket.io";
 
-const port = 9000;
+const httpServer = createServer();
 
-const peerServer = PeerServer({
-    port: port,
-    path: '/myapp',
-    proxied: true, // Useful if behind proxy, harmless if not
-    allow_discovery: true,
+const io = new Server(httpServer, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
-console.log(`Local PeerServer running on port ${port}, path: /myapp`);
+console.log("Socket.io server starting on port 9000...");
 
-peerServer.on('connection', (client) => {
-    console.log(`Client connected: ${client.getId()}`);
+io.on("connection", (socket) => {
+    console.log("Client connected:", socket.id);
+
+    socket.on("join", (roomId) => {
+        socket.join(roomId);
+        console.log(`${socket.id} joined ${roomId}`);
+    });
+
+    socket.on("app-data", (data) => {
+        const { target, payload } = data;
+        if (target) {
+            // Send to specific room (target = shortId)
+            io.to(target).emit("app-data", { sender: socket.id, payload });
+            console.log(`Relayed data from ${socket.id} to ${target}`);
+        } else {
+            socket.broadcast.emit("app-data", { sender: socket.id, payload });
+        }
+    });
+
+    socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
+    });
 });
 
-peerServer.on('disconnect', (client) => {
-    console.log(`Client disconnected: ${client.getId()}`);
+const PORT = 9000;
+httpServer.listen(PORT, () => {
+    console.log(`Socket.io server running on port ${PORT}`);
 });
