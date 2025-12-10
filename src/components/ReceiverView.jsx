@@ -7,6 +7,7 @@ const ReceiverView = () => {
     const [targetCell, setTargetCell] = useState(null) // { row, col }
     const [isBusy, setIsBusy] = useState(false)
     const [showHelp, setShowHelp] = useState(false)
+    const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
     const videoRef = useRef(null)
     const canvasRef = useRef(null)
     const connectAttemptedRef = useRef(false) // Prevent double submits
@@ -50,15 +51,50 @@ const ReceiverView = () => {
     const startCamera = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' }
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    // Request advanced focus features if available
+                    advanced: [{ focusMode: 'continuous' }]
+                }
             })
             if (videoRef.current) {
                 videoRef.current.srcObject = stream
+                
+                // Apply track constraints if possible (post-stream)
+                const track = stream.getVideoTracks()[0];
+                if (track) {
+                    const capabilities = track.getCapabilities();
+                    if (capabilities.focusMode) {
+                        try {
+                            await track.applyConstraints({
+                                advanced: [{ focusMode: 'continuous' }]
+                            });
+                        } catch (e) {
+                            console.log('Focus mode not supported', e);
+                        }
+                    }
+                }
             }
         } catch (err) {
             console.error("Camera error:", err)
             alert("Please allow Camera access.")
         }
+    }
+
+    const handleDisconnect = () => {
+        // Close all connections
+        connections.forEach(conn => conn.close())
+        setStep('connect')
+        setShowDisconnectConfirm(false)
+        // Stop camera stream
+        if (videoRef.current && videoRef.current.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(track => track.stop())
+            videoRef.current.srcObject = null
+        }
+        // Ideally reload to fresh state or rely on useEffect cleanup
+        window.location.reload()
     }
 
     // Listen for active cell updates
@@ -89,10 +125,12 @@ const ReceiverView = () => {
         const video = videoRef.current
         const canvas = canvasRef.current
 
-        const MAX_SIZE = 800
+        // Increased from 800 to 1280 for HD quality (approx 1MP)
+        const MAX_SIZE = 1280
         let width = video.videoWidth
         let height = video.videoHeight
 
+        // Maintain aspect ratio while resizing
         if (width > height) {
             if (width > MAX_SIZE) {
                 height *= MAX_SIZE / width
@@ -109,7 +147,10 @@ const ReceiverView = () => {
         canvas.height = height
         const context = canvas.getContext('2d')
         context.drawImage(video, 0, 0, width, height)
-        const imageData = canvas.toDataURL('image/jpeg', 0.5)
+        
+        // Increased quality from 0.5 to 0.7 for sharper images
+        // This typically results in ~100-150KB files, fitting our storage budget
+        const imageData = canvas.toDataURL('image/jpeg', 0.7)
 
         sendData({
             type: 'IMAGE_DATA',
@@ -217,14 +258,49 @@ const ReceiverView = () => {
                         </div>
                     </div>
                     
-                    <div className="h-[120px] bg-black flex items-center justify-center shrink-0">
+                    <div className="h-[120px] bg-black flex items-center justify-between px-8 shrink-0 relative">
+                        {/* Placeholder for left side to balance layout */}
+                        <div className="w-10"></div>
+
                         <button
                             id="shutter-btn"
                             className={`w-[72px] h-[72px] rounded-full border-4 transition-all duration-200 ${targetCell ? 'bg-white border-white/20 cursor-pointer active:scale-90' : 'bg-gray-500 border-gray-600 cursor-not-allowed opacity-50'}`}
                             onClick={takePicture}
                             disabled={!targetCell}
                         />
+
+                        {/* Disconnect Trigger */}
+                        <button
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-[#222] text-red-500 active:scale-95 transition-transform"
+                            onClick={() => setShowDisconnectConfirm(true)}
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                        </button>
                     </div>
+
+                    {/* Disconnect Drawer */}
+                    {showDisconnectConfirm && (
+                        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end animate-fadeIn">
+                            <div className="bg-[#1a1a1a] w-full rounded-t-2xl p-6 border-t border-[#333] animate-[slideUp_0.2s_ease-out]">
+                                <h3 className="text-lg font-bold text-white mb-2">Disconnect?</h3>
+                                <p className="text-gray-400 text-sm mb-6">You will return to the mode selection screen.</p>
+                                <div className="flex gap-3">
+                                    <button
+                                        className="flex-1 py-3 bg-[#333] text-white rounded-xl font-medium active:scale-[0.98] transition-transform"
+                                        onClick={() => setShowDisconnectConfirm(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="flex-1 py-3 bg-red-600 text-white rounded-xl font-medium active:scale-[0.98] transition-transform"
+                                        onClick={handleDisconnect}
+                                    >
+                                        Disconnect
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

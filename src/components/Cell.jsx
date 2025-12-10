@@ -16,12 +16,15 @@ const Cell = memo(function Cell({
     onMouseDown,
     onMouseEnter,
     onImageRemove,
+    onImageDrop,
     onImagePreview,
     onFillHandleMouseDown,
     style: customStyle = {}
 }) {
     const inputRef = useRef(null)
     const [inputValue, setInputValue] = useState(value)
+    const [isDraggingOver, setIsDraggingOver] = useState(false)
+    const [isProcessing, setIsProcessing] = useState(false)
 
     // Sync local state only when entering edit mode or when value changes while NOT editing
     // This prevents external prop updates (like re-renders) from overwriting local typing
@@ -45,7 +48,7 @@ const Cell = memo(function Cell({
     let className = 'border-r border-b border-border-color px-0.5 text-[11px] flex items-center whitespace-nowrap overflow-hidden relative select-none text-text-primary cursor-cell bg-bg-primary'
     
     if (type === 'image' && value && value.length > 0) {
-        className += ' h-auto min-h-[32px]'
+        className += ' h-auto min-h-[48px]'
     } else {
         className += ' min-h-[20px] h-full'
     }
@@ -105,21 +108,57 @@ const Cell = memo(function Cell({
     // Image Cell
     if (type === 'image') {
         const images = Array.isArray(value) ? value : []
+        const bgClass = isDraggingOver ? 'bg-green-100 !bg-green-100 ring-2 ring-green-500 z-50' : ''
+        
         return (
             <div
-                className={className}
+                className={`${className} ${bgClass}`}
                 style={style}
                 onClick={(e) => onClick(row, col, e)}
                 onMouseDown={(e) => onMouseDown(row, col, e)}
                 onMouseEnter={() => onMouseEnter(row, col)}
+                onDragOver={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (!isDraggingOver) setIsDraggingOver(true)
+                }}
+                onDragLeave={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    // Only disable highlight if we are actually leaving the cell container,
+                    // not just entering a child element (like an existing image)
+                    if (e.currentTarget.contains(e.relatedTarget)) return
+                    setIsDraggingOver(false)
+                }}
+                onDrop={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsDraggingOver(false)
+                    
+                    if (onImageDrop) {
+                        setIsProcessing(true)
+                        try {
+                            await onImageDrop(row, col, e)
+                        } finally {
+                            setIsProcessing(false)
+                        }
+                    }
+                }}
             >
-                <div className="w-full h-full flex items-center justify-center p-0.5">
+                <div className="w-full h-full flex items-center justify-start p-0.5 pointer-events-auto relative overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border-color">
+                    {isProcessing ? (
+                         <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-50 rounded text-white text-[9px] font-bold">
+                            <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1"></div>
+                            Processing...
+                         </div>
+                    ) : null}
+
                     {images.length > 0 ? (
-                        <div className="flex gap-1 h-full items-center">
+                        <div className="flex gap-1 h-full items-center min-w-min px-1">
                             {images.map((img, i) => (
                                 <div
                                     key={i}
-                                    className="h-full aspect-square relative border border-border-color rounded-md overflow-hidden group/image cursor-pointer shadow-sm hover:scale-105 transition-transform"
+                                    className="h-12 aspect-square relative border border-border-color rounded-md overflow-hidden group/image cursor-pointer shadow-sm hover:scale-95 transition-transform shrink-0"
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         onImagePreview(img)
@@ -141,7 +180,7 @@ const Cell = memo(function Cell({
                             ))}
                         </div>
                     ) : (
-                        isSelected && <span className="text-text-tertiary text-[9px] opacity-50 font-medium tracking-wide">READY</span>
+                        isSelected && !isProcessing && <div className="w-full h-full flex items-center justify-center pointer-events-none"><span className="text-text-tertiary text-[9px] opacity-50 font-medium tracking-wide">READY</span></div>
                     )}
                 </div>
             </div>

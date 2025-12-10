@@ -5,6 +5,7 @@ import DeviceManagerModal from './DeviceManagerModal'
 import FloatingControls from './FloatingControls'
 import ImagePreview from './ImagePreview'
 import { useConnection } from '../hooks/useConnection'
+import { processImage } from '../utils/imageProcessing'
 
 const INITIAL_COLUMNS = [
     { id: 'images', name: 'Images', type: 'image', locked: true },
@@ -185,9 +186,32 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme, installPro
     useEffect(() => { setConnectedDevices(connections.map(c => c.peer)) }, [connections])
 
     // Persistence
-    useEffect(() => { localStorage.setItem('spreadsheet_columns', JSON.stringify(columns)) }, [columns])
-    useEffect(() => { localStorage.setItem('spreadsheet_data_v3', JSON.stringify(data)) }, [data])
-    useEffect(() => { localStorage.setItem('spreadsheet_widths_v2', JSON.stringify(columnWidths)) }, [columnWidths])
+    useEffect(() => {
+        try {
+            localStorage.setItem('spreadsheet_columns', JSON.stringify(columns))
+        } catch (e) {
+            console.error('Failed to save columns:', e)
+        }
+    }, [columns])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('spreadsheet_data_v3', JSON.stringify(data))
+        } catch (e) {
+            console.error('Storage quota exceeded:', e)
+            if (e.name === 'QuotaExceededError') {
+                alert('Storage limit reached! Please remove some images to save changes.')
+            }
+        }
+    }, [data])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('spreadsheet_widths_v2', JSON.stringify(columnWidths))
+        } catch (e) {
+            console.error('Failed to save widths:', e)
+        }
+    }, [columnWidths])
 
     // Broadcast Active Cell
     useEffect(() => {
@@ -680,6 +704,38 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme, installPro
         })
     }, [pushHistory])
 
+    const handleImageDrop = useCallback(async (row, colId, e) => {
+        const files = Array.from(e.dataTransfer.files)
+        const validImages = files.filter(file => file.type.startsWith('image/'))
+        
+        if (validImages.length === 0) return
+
+        try {
+            const processedImages = await Promise.all(validImages.map(file => processImage(file)))
+            
+            setData(prev => {
+                pushHistory(prev)
+                const key = getCellKey(row, colId)
+                const cell = prev[key] || createInitialCell(row, colId, 'image')
+                const currentImages = Array.isArray(cell.rawValue) ? cell.rawValue : []
+                
+                const availableSlots = 4 - currentImages.length
+                if (availableSlots <= 0) return prev
+
+                const imagesToAdd = processedImages.slice(0, availableSlots)
+                const updatedImages = [...currentImages, ...imagesToAdd]
+
+                return {
+                    ...prev,
+                    [key]: { ...cell, rawValue: updatedImages, displayValue: updatedImages, type: 'image' }
+                }
+            })
+        } catch (error) {
+            console.error("Image processing failed:", error)
+            alert("Failed to process some images. Please try again.")
+        }
+    }, [pushHistory])
+
     const handleFillHandleMouseDown = useCallback((row, colId, e) => {
         e.preventDefault()
         const { columns } = stateRef.current
@@ -740,6 +796,7 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme, installPro
                     onCellMouseDown={handleCellMouseDown}
                     onCellMouseEnter={handleCellMouseEnter}
                     onImageRemove={handleImageRemove}
+                    onImageDrop={handleImageDrop}
                     onImagePreview={setPreviewImage}
                     onFillHandleMouseDown={handleFillHandleMouseDown}
                     onHeaderClick={handleRowHeaderClick}
@@ -747,7 +804,7 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme, installPro
             )
         }
         return result
-    }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, columns, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handleFillHandleMouseDown, handleRowHeaderClick])
+    }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, columns, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handleImageDrop, handleFillHandleMouseDown, handleRowHeaderClick])
 
     return (
         <div className="flex-1 overflow-auto bg-bg-primary relative scrollbar-thin scrollbar-thumb-border-color scrollbar-track-transparent" ref={containerRef}>

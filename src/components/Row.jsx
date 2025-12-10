@@ -34,6 +34,7 @@ const Row = memo(function Row({
     onCellMouseDown,
     onCellMouseEnter,
     onImageRemove,
+    onImageDrop,
     onImagePreview,
     onFillHandleMouseDown,
     onHeaderClick
@@ -88,6 +89,7 @@ const Row = memo(function Row({
                         onMouseDown={onCellMouseDown}
                         onMouseEnter={onCellMouseEnter}
                         onImageRemove={onImageRemove}
+                        onImageDrop={onImageDrop}
                         onImagePreview={onImagePreview}
                         onFillHandleMouseDown={onFillHandleMouseDown}
                         style={stickyStyle}
