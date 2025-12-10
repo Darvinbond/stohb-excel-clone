@@ -48,12 +48,9 @@ function App() {
   }
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {mode === 'provider' ? (
-        <>
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          <Spreadsheet />
-        </>
+        <Spreadsheet theme={theme} onToggleTheme={toggleTheme} />
       ) : (
         <ReceiverView />
       )}

@@ -4,7 +4,7 @@ import { useConnection } from '../hooks/useConnection'
 const ReceiverView = () => {
     const [providerCode, setProviderCode] = useState('')
     const [step, setStep] = useState('connect')
-    const [assignedCell, setAssignedCell] = useState(null)
+    const [targetCell, setTargetCell] = useState(null) // { row, col }
     const [isBusy, setIsBusy] = useState(false)
     const [showHelp, setShowHelp] = useState(false)
     const videoRef = useRef(null)
@@ -17,7 +17,7 @@ const ReceiverView = () => {
     useEffect(() => {
         if (connections.length > 0 && step === 'connect') {
             setIsBusy(false)
-            setStep('waiting')
+            setStep('camera') // Go straight to camera
             // Send GREET
             setTimeout(() => sendData({ type: 'GREET' }), 500)
         }
@@ -61,22 +61,30 @@ const ReceiverView = () => {
         }
     }
 
-    // Listen for assignments
+    // Listen for active cell updates
     useEffect(() => {
         const handleData = (event) => {
             const { type, payload } = event.detail.data || {}
-            if (type === 'ASSIGN_CELL') {
-                setAssignedCell(payload)
-                setStep('camera')
-                startCamera()
+            if (type === 'SET_ACTIVE_CELL') {
+                setTargetCell(payload)
             }
         }
         window.addEventListener('peer-data', handleData)
         return () => window.removeEventListener('peer-data', handleData)
     }, [])
 
+    // Start camera when entering camera step
+    useEffect(() => {
+        if (step === 'camera') {
+            startCamera()
+        }
+    }, [step])
+
     const takePicture = () => {
-        if (!videoRef.current || !canvasRef.current || !assignedCell) return
+        if (!videoRef.current || !canvasRef.current || !targetCell) {
+            alert("Please select an image cell on the spreadsheet first!")
+            return
+        }
 
         const video = videoRef.current
         const canvas = canvasRef.current
@@ -106,16 +114,18 @@ const ReceiverView = () => {
         sendData({
             type: 'IMAGE_DATA',
             payload: {
-                row: assignedCell.row,
-                col: assignedCell.col,
+                row: targetCell.row,
+                col: targetCell.col,
                 image: imageData
             }
         })
-
-        setAssignedCell(prev => ({
-            ...prev,
-            currentCount: (prev.currentCount || 0) + 1
-        }))
+        
+        // Visual feedback
+        const btn = document.getElementById('shutter-btn')
+        if(btn) {
+            btn.style.transform = 'scale(0.9)'
+            setTimeout(() => btn.style.transform = 'scale(1)', 100)
+        }
     }
 
     return (
@@ -172,19 +182,27 @@ const ReceiverView = () => {
                 </div>
             )}
 
-            {step === 'waiting' && (
-                <div className="flex flex-col items-center justify-center flex-1">
-                    <h1 className="text-3xl font-bold mb-4">Connected!</h1>
-                    <div className="w-10 h-10 border-4 border-[#333] border-t-white rounded-full animate-spin"></div>
-                </div>
-            )}
-
             {step === 'camera' && (
-                <div className="flex-1 relative bg-black">
-                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                    <canvas ref={canvasRef} className="hidden" />
-                    <div className="absolute bottom-10 w-full flex justify-center">
-                        <button className="w-[72px] h-[72px] rounded-full bg-white border-4 border-black/10" onClick={takePicture} />
+                <div className="flex-1 relative bg-black flex flex-col">
+                    <div className="relative flex-1 overflow-hidden">
+                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                        <canvas ref={canvasRef} className="hidden" />
+                        
+                        {/* Target Indicator */}
+                        <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none">
+                            <div className={`px-4 py-2 rounded-full backdrop-blur-md text-sm font-medium transition-colors ${targetCell ? 'bg-green-500/80 text-white' : 'bg-red-500/80 text-white'}`}>
+                                {targetCell ? `Ready for Row ${targetCell.row + 1}` : 'Select a cell on PC'}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="h-[120px] bg-black flex items-center justify-center shrink-0">
+                        <button
+                            id="shutter-btn"
+                            className={`w-[72px] h-[72px] rounded-full border-4 transition-all duration-200 ${targetCell ? 'bg-white border-white/20 cursor-pointer active:scale-90' : 'bg-gray-500 border-gray-600 cursor-not-allowed opacity-50'}`}
+                            onClick={takePicture}
+                            disabled={!targetCell}
+                        />
                     </div>
                 </div>
             )}

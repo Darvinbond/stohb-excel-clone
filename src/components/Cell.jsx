@@ -9,7 +9,6 @@ const Cell = memo(function Cell({
     isSelected,
     isEditing,
     inRange,
-    isAssigned,
     cellWidth,
     onClick,
     onDoubleClick,
@@ -17,9 +16,9 @@ const Cell = memo(function Cell({
     onMouseDown,
     onMouseEnter,
     onImageRemove,
-    onPairRequest,
     onImagePreview,
-    onFillHandleMouseDown
+    onFillHandleMouseDown,
+    style: customStyle = {}
 }) {
     const inputRef = useRef(null)
 
@@ -35,15 +34,16 @@ const Cell = memo(function Cell({
     const className = `
         border-r border-b border-border-color px-0.5 text-[11px] h-5 flex items-center
         whitespace-nowrap overflow-hidden relative select-none text-text-primary cursor-cell
-        ${isAssigned ? 'bg-emerald-100' : 'bg-bg-primary'}
-        ${isSelected ? 'shadow-[inset_0_0_0_2px_#1a73e8] z-5' : ''}
-        ${isEditing ? 'p-0 z-20 shadow-[0_0_0_2px_#1a73e8]' : ''}
-        ${inRange ? 'bg-blue-100' : ''}
+        bg-bg-primary
+        ${isSelected ? 'shadow-[inset_0_0_0_2px_#000000] dark:shadow-[inset_0_0_0_2px_#ffffff] z-10' : ''}
+        ${isEditing ? 'p-0 z-20 shadow-[0_0_0_2px_#000000] dark:shadow-[0_0_0_2px_#ffffff]' : ''}
+        ${inRange ? '!bg-selection-color' : ''}
         ${type === 'image' ? 'p-0 justify-center' : ''}
     `.trim().replace(/\s+/g, ' ')
 
     const style = {
         width: cellWidth,
+        ...customStyle
     }
 
     if (isEditing && type !== 'image') {
@@ -107,19 +107,7 @@ const Cell = memo(function Cell({
                             ))}
                         </div>
                     ) : (
-                        isAssigned ? (
-                            <span className="text-emerald-600 text-xs font-medium">Ready</span>
-                        ) : (
-                            <button
-                                className="pair-btn border-none bg-black text-white rounded-full w-4 h-4 text-xs cursor-pointer flex items-center justify-center hover:bg-gray-700 transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    onPairRequest(row, col)
-                                }}
-                            >
-                                +
-                            </button>
-                        )
+                        isSelected && <span className="text-text-tertiary text-[9px] opacity-50">Active</span>
                     )}
                 </div>
             </div>

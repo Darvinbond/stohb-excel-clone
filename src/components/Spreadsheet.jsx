@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react'
 import Cell from './Cell'
-import CodePopup from './CodePopup'
+import DeviceManagerModal from './DeviceManagerModal'
+import FloatingControls from './FloatingControls'
 import ImagePreview from './ImagePreview'
 import { useConnection } from '../hooks/useConnection'
 
@@ -18,8 +19,9 @@ const COLUMNS = [
 ]
 
 const INITIAL_ROWS = 100
-const DEFAULT_COL_WIDTH = 100 // Smaller default
+const DEFAULT_COL_WIDTH = 100
 const MIN_COL_WIDTH = 40
+const ROW_HEADER_WIDTH = 32
 
 function createInitialCell(row, col) {
     if (col === 0) return { rawValue: [], displayValue: [], type: 'image', style: {} }
@@ -36,13 +38,7 @@ function createInitialData(rows, cols) {
     return data
 }
 
-// Simplified migration - just load data, ignore old formulas/complexity
-function migrateData(oldData) {
-    if (!oldData) return createInitialData(INITIAL_ROWS, COLUMNS.length)
-    return oldData // Assume mostly compatible or just raw values
-}
-
-const Spreadsheet = memo(function Spreadsheet() {
+const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
     // 1. STATE
     const [data, setData] = useState(() => {
         try {
@@ -76,7 +72,7 @@ const Spreadsheet = memo(function Spreadsheet() {
 
     // Selection
     const [selectedCell, setSelectedCell] = useState(null)
-    const selectedCellRef = useRef(selectedCell) // Ref for event listeners
+    const selectedCellRef = useRef(selectedCell)
     const [selectionRange, setSelectionRange] = useState(null)
     const [editingCell, setEditingCell] = useState(null)
     const [isSelecting, setIsSelecting] = useState(false)
@@ -85,10 +81,9 @@ const Spreadsheet = memo(function Spreadsheet() {
     const [resizingCol, setResizingCol] = useState(null)
     const [resizeStartX, setResizeStartX] = useState(0)
     const [resizeStartWidth, setResizeStartWidth] = useState(0)
-    const [showCodePopup, setShowCodePopup] = useState(false)
+    const [isDeviceManagerOpen, setIsDeviceManagerOpen] = useState(false)
     const [previewImage, setPreviewImage] = useState(null)
     const [connectedDevices, setConnectedDevices] = useState([])
-    const [assignedCells, setAssignedCells] = useState({}) // Track which cells have devices assigned { "row-col": deviceId }
 
     // Fill handle drag state
     const [isFilling, setIsFilling] = useState(false)
@@ -102,7 +97,7 @@ const Spreadsheet = memo(function Spreadsheet() {
     const numRows = INITIAL_ROWS
     const numCols = COLUMNS.length
 
-    // Ref Sync
+    // Ref Sync & Connection State
     useEffect(() => { selectedCellRef.current = selectedCell }, [selectedCell])
     useEffect(() => { setConnectedDevices(connections.map(c => c.peer)) }, [connections])
 
@@ -110,14 +105,23 @@ const Spreadsheet = memo(function Spreadsheet() {
     useEffect(() => { localStorage.setItem('spreadsheet_data_v2', JSON.stringify(data)) }, [data])
     useEffect(() => { localStorage.setItem('spreadsheet_widths', JSON.stringify(columnWidths)) }, [columnWidths])
 
-    // 2. LOGIC (No Formulas)
+    // Broadcast Active Cell
+    useEffect(() => {
+        if (selectedCell && selectedCell.col === 0) {
+            // Broadcast active cell to all connected devices
+            sendData({ 
+                type: 'SET_ACTIVE_CELL', 
+                payload: { row: selectedCell.row, col: selectedCell.col } 
+            })
+        }
+    }, [selectedCell, sendData])
+
+    // 2. LOGIC
     const updateCell = useCallback((row, col, value) => {
         setData(prev => {
             pushHistory(prev)
             const key = `${row}-${col}`
             const cell = prev[key] || createInitialCell(row, col)
-            // Direct update, no formula check
-            // Check if input is numeric
             const type = isNaN(Number(value)) || value === '' ? 'text' : 'number'
             return {
                 ...prev,
@@ -127,20 +131,17 @@ const Spreadsheet = memo(function Spreadsheet() {
     }, [pushHistory])
 
     // 3. EVENT HANDLERS
-
     // -- Connection --
     useEffect(() => {
         const handleData = (event) => {
             const { type, payload } = event.detail.data || {}
-            const senderId = event.detail.peerId
-
+            
             if (type === 'IMAGE_DATA') {
                 const { row, col, image } = payload
                 setData(prev => {
                     const key = `${row}-${col}`
                     const currentCell = prev[key] || createInitialCell(row, col)
                     const currentImages = Array.isArray(currentCell.rawValue) ? currentCell.rawValue : []
-                    // Limit 4
                     if (currentImages.length >= 4) return prev
                     const newImages = [...currentImages, image]
                     return {
@@ -151,14 +152,12 @@ const Spreadsheet = memo(function Spreadsheet() {
             }
 
             if (type === 'GREET') {
-                // Auto-assign to current selected
-                if (selectedCellRef.current) {
-                    const { row, col } = selectedCellRef.current
-                    if (col === 0) { // Only assign if on Image column
-                        sendData({ type: 'ASSIGN_CELL', payload: { row, col, currentCount: 0 } }, senderId)
-                        // Mark this cell as having an assigned device
-                        setAssignedCells(prev => ({ ...prev, [`${row}-${col}`]: senderId }))
-                    }
+                // If we have a selected image cell, send it immediately to the new device
+                if (selectedCellRef.current && selectedCellRef.current.col === 0) {
+                     sendData({ 
+                        type: 'SET_ACTIVE_CELL', 
+                        payload: { row: selectedCellRef.current.row, col: selectedCellRef.current.col } 
+                    }, event.detail.peerId)
                 }
             }
         }
@@ -166,43 +165,29 @@ const Spreadsheet = memo(function Spreadsheet() {
         return () => window.removeEventListener('peer-data', handleData)
     }, [sendData])
 
-    // -- Keyboard: Type to Overwrite --
+    // -- Keyboard --
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // If editing, let default input behavior happen
             if (editingCell) return
-
-            // If popups open, ignore
-            if (showCodePopup || previewImage) return
-
-            // If no cell selected, ignore
+            if (isDeviceManagerOpen || previewImage) return
             if (!selectedCell) return
-
-            // Ignore special keys (Ctrl, Alt, Meta)
             if (e.ctrlKey || e.metaKey || e.altKey) return
 
-            // Skip typing in image column (col 0)
             const isImageCol = selectedCell.col === 0
 
-            // Key must be a printable character (length 1)
-            // Also handle Backspace/Delete to clear
             if (e.key.length === 1 && !isImageCol) {
-                // Start editing with this key - overwrites current value
                 setEditingCell(selectedCell)
                 updateCell(selectedCell.row, selectedCell.col, e.key)
                 e.preventDefault()
             } else if ((e.key === 'Backspace' || e.key === 'Delete') && !isImageCol) {
-                // Clear cell
                 updateCell(selectedCell.row, selectedCell.col, '')
                 e.preventDefault()
             } else if (e.key === 'Enter') {
-                // Move down
                 e.preventDefault()
                 const nextRow = Math.min(numRows - 1, selectedCell.row + 1)
                 setSelectedCell({ row: nextRow, col: selectedCell.col })
                 setSelectionRange(null)
             } else if (e.key === 'Tab') {
-                // Move right
                 e.preventDefault()
                 const nextCol = Math.min(numCols - 1, selectedCell.col + 1)
                 setSelectedCell({ row: selectedCell.row, col: nextCol })
@@ -216,7 +201,6 @@ const Spreadsheet = memo(function Spreadsheet() {
                 if (e.key === 'ArrowRight') col = Math.min(numCols - 1, col + 1)
 
                 if (e.shiftKey) {
-                    // Extend selection
                     setSelectionRange(prev => {
                         const startRow = prev ? prev.startRow : selectedCell.row
                         const startCol = prev ? prev.startCol : selectedCell.col
@@ -231,98 +215,11 @@ const Spreadsheet = memo(function Spreadsheet() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedCell, editingCell, showCodePopup, previewImage, updateCell, numRows, numCols])
-
-    // -- Clipboard: Copy/Paste --
-    useEffect(() => {
-        const handleCopy = (e) => {
-            if (editingCell) return // Let native copy work in input
-            if (!selectedCell) return
-
-            // Determine range
-            let r1 = selectedCell.row, c1 = selectedCell.col
-            let r2 = selectedCell.row, c2 = selectedCell.col
-
-            if (selectionRange) {
-                r1 = Math.min(selectionRange.startRow, selectionRange.endRow)
-                r2 = Math.max(selectionRange.startRow, selectionRange.endRow)
-                c1 = Math.min(selectionRange.startCol, selectionRange.endCol)
-                c2 = Math.max(selectionRange.startCol, selectionRange.endCol)
-            }
-
-            // Build TSV string
-            let text = ''
-            for (let r = r1; r <= r2; r++) {
-                const rowVals = []
-                for (let c = c1; c <= c2; c++) {
-                    const cell = data[`${r}-${c}`]
-                    // If image, maybe skip or put placeholder? Text only for now.
-                    rowVals.push(cell ? cell.displayValue : '')
-                }
-                text += rowVals.join('\t') + (r < r2 ? '\n' : '')
-            }
-
-            e.clipboardData.setData('text/plain', text)
-            e.preventDefault()
-        }
-
-        const handlePaste = (e) => {
-            if (editingCell) return // Let native paste work
-            if (!selectedCell) return
-            e.preventDefault()
-
-            const text = e.clipboardData.getData('text/plain')
-            if (!text) return
-
-            const rows = text.split(/\r\n|\n|\r/)
-            if (rows.length === 0) return
-
-            // Paste starting at selected cell
-            const startRow = selectedCell.row
-            const startCol = selectedCell.col
-
-            setData(prev => {
-                pushHistory(prev)
-                const newData = { ...prev }
-
-                rows.forEach((rowStr, i) => {
-                    const r = startRow + i
-                    if (r >= numRows) return
-                    const cols = rowStr.split('\t')
-                    cols.forEach((val, j) => {
-                        const c = startCol + j
-                        if (c >= numCols) return
-                        const key = `${r}-${c}`
-                        const cell = newData[key] || createInitialCell(r, c)
-
-                        // Don't paste text into Image column? Or reset it?
-                        if (c === 0) return // Skip image column for text paste usually
-
-                        newData[key] = {
-                            ...cell,
-                            rawValue: val,
-                            displayValue: val,
-                            type: isNaN(Number(val)) ? 'text' : 'number'
-                        }
-                    })
-                })
-                return newData
-            })
-        }
-
-        document.addEventListener('copy', handleCopy)
-        document.addEventListener('paste', handlePaste)
-        return () => {
-            document.removeEventListener('copy', handleCopy)
-            document.removeEventListener('paste', handlePaste)
-        }
-    }, [selectedCell, selectionRange, editingCell, data, numRows, numCols, pushHistory])
-
+    }, [selectedCell, editingCell, isDeviceManagerOpen, previewImage, updateCell, numRows, numCols])
 
     // -- Mouse Interactions --
     const handleCellClick = useCallback((row, col, e) => {
         if (editingCell?.row !== row || editingCell?.col !== col) setEditingCell(null)
-
         if (e.shiftKey && selectedCell) {
             setSelectionRange({
                 startRow: selectedCell.row,
@@ -337,20 +234,17 @@ const Spreadsheet = memo(function Spreadsheet() {
     }, [editingCell, selectedCell])
 
     const handleCellDoubleClick = useCallback((row, col) => {
-        if (col === 0) return // Cannot edit image cell text
+        if (col === 0) return 
         setEditingCell({ row, col })
-        // Use timeout to allow input to render then focus is handled in Cell
     }, [])
 
-    // Drag selection
     const handleCellMouseDown = useCallback((row, col, e) => {
-        if (e.button !== 0) return // Left click only
-        // Ignore specific UI elements
-        if (e.target.closest('.pair-btn') || e.target.closest('.remove-image-btn')) return
+        if (e.button !== 0) return
+        if (e.target.closest('.remove-image-btn')) return
 
         setIsSelecting(true)
         setSelectedCell({ row, col })
-        setEditingCell(null) // Stop editing
+        setEditingCell(null)
         setSelectionRange({ startRow: row, startCol: col, endRow: row, endCol: col })
     }, [])
 
@@ -365,10 +259,9 @@ const Spreadsheet = memo(function Spreadsheet() {
 
     useEffect(() => {
         const handleMouseUp = () => {
-            // Handle fill on mouse up
             if (isFilling && fillStartCell && selectionRange) {
                 const sourceValue = data[`${fillStartCell.row}-${fillStartCell.col}`]?.rawValue || ''
-                if (sourceValue && fillStartCell.col !== 0) { // Don't fill image column
+                if (sourceValue && fillStartCell.col !== 0) {
                     setData(prev => {
                         pushHistory(prev)
                         const newData = { ...prev }
@@ -378,7 +271,7 @@ const Spreadsheet = memo(function Spreadsheet() {
 
                         for (let r = minR; r <= maxR; r++) {
                             for (let c = minC; c <= maxC; c++) {
-                                if (c === 0) continue // Skip image column
+                                if (c === 0) continue
                                 const key = `${r}-${c}`
                                 const cell = newData[key] || createInitialCell(r, c)
                                 newData[key] = {
@@ -447,12 +340,6 @@ const Spreadsheet = memo(function Spreadsheet() {
         })
     }, [pushHistory])
 
-    const handlePairRequest = useCallback((row, col) => {
-        setSelectedCell({ row, col })
-        setShowCodePopup(true)
-    }, [])
-
-    // Fill handle drag start
     const handleFillHandleMouseDown = useCallback((row, col, e) => {
         e.preventDefault()
         setIsFilling(true)
@@ -460,20 +347,27 @@ const Spreadsheet = memo(function Spreadsheet() {
         setSelectionRange({ startRow: row, startCol: col, endRow: row, endCol: col })
     }, [])
 
-
     // -- Render --
     const gridTemplateColumns = useMemo(() => {
         const colWidths = COLUMNS.map((_, i) => `${columnWidths[i] || (i === 0 ? 80 : DEFAULT_COL_WIDTH)}px`).join(' ')
-        return `32px ${colWidths}` // Row header width 32px
+        return `${ROW_HEADER_WIDTH}px ${colWidths}`
     }, [columnWidths])
 
     const rows = useMemo(() => {
         const result = []
         for (let r = 0; r < numRows; r++) {
+            // Calculate sticky position for Row Number (Left: 0)
+            const rowHeaderStyle = {
+                position: 'sticky',
+                left: 0,
+                zIndex: 20
+            }
+
             result.push(
                 <div key={r} className="contents">
                     <div
-                        className="bg-bg-secondary justify-center text-text-secondary sticky left-0 z-20 border-r-2 border-border-color cursor-default w-8 border-b border-border-color px-0.5 text-[10px] h-5 flex items-center"
+                        className="bg-bg-secondary justify-center text-text-secondary border-r border-border-color cursor-default w-8 border-b px-0.5 text-[10px] h-5 flex items-center select-none"
+                        style={rowHeaderStyle}
                         onClick={() => {
                             setSelectedCell({ row: r, col: 0 })
                             setSelectionRange({ startRow: r, startCol: 0, endRow: r, endCol: numCols - 1 })
@@ -496,13 +390,15 @@ const Spreadsheet = memo(function Spreadsheet() {
                             inRange = r >= minR && r <= maxR && c >= minC && c <= maxC
                         }
 
-                        // Determine value
-                        // If editing, Cell component uses input with current value
-                        // If type override happened, data is already updated
-
                         const cellWidth = columnWidths[c] || (c === 0 ? 80 : DEFAULT_COL_WIDTH)
 
-                        const isAssigned = !!assignedCells[key]
+                        // Calculate sticky position for Image Column (Col 0)
+                        // Sticky Left = Width of Row Header
+                        const stickyStyle = c === 0 ? {
+                            position: 'sticky',
+                            left: `${ROW_HEADER_WIDTH}px`,
+                            zIndex: 20
+                        } : {}
 
                         return (
                             <Cell
@@ -515,7 +411,6 @@ const Spreadsheet = memo(function Spreadsheet() {
                                 isSelected={isSelected}
                                 isEditing={isEditing}
                                 inRange={inRange}
-                                isAssigned={isAssigned}
                                 cellWidth={cellWidth}
                                 onClick={handleCellClick}
                                 onDoubleClick={handleCellDoubleClick}
@@ -523,9 +418,9 @@ const Spreadsheet = memo(function Spreadsheet() {
                                 onMouseDown={handleCellMouseDown}
                                 onMouseEnter={handleCellMouseEnter}
                                 onImageRemove={handleImageRemove}
-                                onPairRequest={handlePairRequest}
                                 onImagePreview={setPreviewImage}
                                 onFillHandleMouseDown={handleFillHandleMouseDown}
+                                style={stickyStyle}
                             />
                         )
                     })}
@@ -533,43 +428,63 @@ const Spreadsheet = memo(function Spreadsheet() {
             )
         }
         return result
-    }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, assignedCells, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handlePairRequest, handleFillHandleMouseDown])
+    }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handleFillHandleMouseDown])
 
     return (
         <div className="flex-1 overflow-auto bg-bg-primary relative scrollbar-thin scrollbar-thumb-border-color scrollbar-track-transparent" ref={containerRef}>
             <div className="grid relative" style={{ gridTemplateColumns }}>
-                {/* Header */}
+                {/* Header Row */}
                 <div className="contents">
-                    <div className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default"></div>
-                    {COLUMNS.map((col, i) => (
-                        <div key={i} className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default">
-                            {col}
-                            <div
-                                className={`absolute right-0 top-0 bottom-0 w-[4px] cursor-col-resize z-40 ${resizingCol === i ? 'bg-accent-color' : 'hover:bg-accent-color'}`}
-                                onMouseDown={(e) => handleResizeStart(i, e)}
-                            />
-                        </div>
-                    ))}
+                    {/* Top Left Corner (Row Nums Header) */}
+                    <div className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold justify-center text-text-secondary cursor-default select-none"
+                        style={{ position: 'sticky', top: 0, left: 0, zIndex: 40 }}
+                    ></div>
+                    
+                    {/* Column Headers */}
+                    {COLUMNS.map((col, i) => {
+                         // Sticky style for the first header cell (Images) to stick left as well
+                        const stickyHeaderStyle = {
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 30, // Normal headers
+                        }
+
+                        if (i === 0) {
+                            stickyHeaderStyle.left = `${ROW_HEADER_WIDTH}px`;
+                            stickyHeaderStyle.zIndex = 40; // Higher z-index for intersection
+                        }
+
+                        return (
+                            <div key={i} 
+                                className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold justify-center text-text-secondary cursor-default select-none group"
+                                style={stickyHeaderStyle}
+                            >
+                                {col}
+                                <div
+                                    className={`absolute right-0 top-0 bottom-0 w-[4px] cursor-col-resize z-50 ${resizingCol === i ? 'bg-accent-color' : 'hover:bg-accent-color'}`}
+                                    onMouseDown={(e) => handleResizeStart(i, e)}
+                                />
+                            </div>
+                        )
+                    })}
                 </div>
                 {/* Body */}
                 {rows}
             </div>
 
-            {showCodePopup && (
-                <CodePopup
-                    code={peerId}
-                    onClose={() => setShowCodePopup(false)}
-                    onAssign={(id) => {
-                        if (selectedCell) {
-                            sendData({ type: 'ASSIGN_CELL', payload: { row: selectedCell.row, col: selectedCell.col, currentCount: 0 } }, id)
-                            setAssignedCells(prev => ({ ...prev, [`${selectedCell.row}-${selectedCell.col}`]: id }))
-                        }
-                        setShowCodePopup(false)
-                    }}
-                    currentCell={selectedCell}
-                    connectedDevices={connectedDevices}
-                />
-            )}
+            <FloatingControls 
+                onOpenDevices={() => setIsDeviceManagerOpen(true)}
+                theme={theme}
+                onToggleTheme={onToggleTheme}
+                connectedCount={connectedDevices.length}
+            />
+
+            <DeviceManagerModal
+                isOpen={isDeviceManagerOpen}
+                onClose={() => setIsDeviceManagerOpen(false)}
+                peerId={peerId}
+                connections={connections}
+            />
 
             {previewImage && <ImagePreview src={previewImage} onClose={() => setPreviewImage(null)} />}
         </div>
