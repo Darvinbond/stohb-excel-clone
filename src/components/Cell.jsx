@@ -1,136 +1,89 @@
-import { memo, useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, memo } from 'react'
 
 const Cell = memo(function Cell({
     row,
     col,
     value,
-    type, // "text", "number", "formula", "image"
+    displayValue,
+    type,
     isSelected,
     isEditing,
     inRange,
-    hideOverflow,
     cellWidth,
     onClick,
     onDoubleClick,
     onChange,
-    onBlur,
-    onFillStart,
     onMouseDown,
     onMouseEnter,
     onImageRemove,
-    onImagePreview,
-    onPairRequest
+    onPairRequest,
+    onImagePreview
 }) {
     const inputRef = useRef(null)
-    const contentRef = useRef(null)
-    const [hasOverflow, setHasOverflow] = useState(false)
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
             inputRef.current.focus()
-            // Only select all if it's the first focus or specific action? 
-            // Standard Excel: F2 -> cursor at end. Double click -> select word/all. Typing -> replace.
-            // Here we just focus.
+            // Cursor at end depends on interaction
+            // If type-to-overwrite, value is 1 char so cursor at end is natural
+            // If double-click, we want cursor at end? Logic is usually browser default or explicit selection
+            // We set value in SpreadSheet logic, so here we just focus
         }
     }, [isEditing])
 
-    // Check if content overflows the cell (only for text cells)
-    useEffect(() => {
-        if ((type === 'text' || type === 'formula') && contentRef.current && value && !isEditing) {
-            const scrollWidth = contentRef.current.scrollWidth
-            const clientWidth = cellWidth - 20
-            setHasOverflow(scrollWidth > clientWidth)
-        } else {
-            setHasOverflow(false)
-        }
-    }, [value, cellWidth, isEditing, type])
+    const className = `cell 
+        ${isSelected ? 'selected' : ''} 
+        ${isEditing ? 'editing' : ''} 
+        ${inRange ? 'in-range' : ''}
+        ${type === 'image' ? 'image-type' : ''}
+    `.replace(/\s+/g, ' ')
 
-    const handleClick = (e) => {
-        onClick(row, col, e)
+    const style = {
+        width: cellWidth,
     }
 
-    const handleDoubleClick = (e) => {
-        e.stopPropagation()
-        onDoubleClick(row, col)
+    if (isEditing && type !== 'image') {
+        return (
+            <div className={className} style={style}>
+                <input
+                    ref={inputRef}
+                    value={value}
+                    onChange={(e) => onChange(row, col, e.target.value)}
+                    onBlur={() => onClick(-1, -1)} // Hacky way to stop editing, or parent handles blur?
+                    // Parent handles blur actually via click away, but we need to capture Keys
+                    onKeyDown={(e) => e.stopPropagation()} // Stop Spreadsheet global listener
+                />
+            </div>
+        )
     }
 
-    const handleChange = (e) => {
-        onChange(row, col, e.target.value)
-    }
-
-    const handleBlur = () => {
-        onBlur()
-    }
-
-    const handleFillMouseDown = (e) => {
-        onFillStart(row, col, e)
-    }
-
-    const handleMouseDown = (e) => {
-        if (onMouseDown) {
-            onMouseDown(row, col, e)
-        }
-    }
-
-    const handleMouseEnter = () => {
-        if (onMouseEnter) {
-            onMouseEnter(row, col)
-        }
-    }
-
-    const handleRemoveImage = (e, index) => {
-        e.stopPropagation()
-        onImageRemove(row, col, index)
-    }
-
-    const handleThumbnailClick = (e, img) => {
-        e.stopPropagation()
-        onImagePreview(img)
-    }
-
-    const handlePairClick = (e) => {
-        e.stopPropagation()
-        onPairRequest(row, col)
-    }
-
-    const className = [
-        'cell',
-        isSelected && 'selected',
-        inRange && 'in-range',
-        hideOverflow && 'hide-overflow',
-        type === 'number' && 'is-number'
-    ].filter(Boolean).join(' ')
-
-    const contentClassName = [
-        'cell-content',
-        hasOverflow && !hideOverflow && !isSelected && !isEditing && 'has-overflow'
-    ].filter(Boolean).join(' ')
-
-    // --- Render Image Cell ---
+    // Image Cell
     if (type === 'image') {
         const images = Array.isArray(value) ? value : []
-
         return (
             <div
                 className={className}
-                data-row={row}
-                data-col={col}
-                onClick={handleClick}
-                onMouseDown={handleMouseDown}
-                onMouseEnter={handleMouseEnter}
-                onDoubleClick={handleDoubleClick}
-                style={{ cursor: 'pointer', padding: 0 }}
+                style={style}
+                onClick={(e) => onClick(row, col, e)}
+                onMouseDown={(e) => onMouseDown(row, col, e)}
+                onMouseEnter={() => onMouseEnter(row, col)}
             >
                 <div className="image-cell-content">
-                    {images.length > 0 && (
+                    {images.length > 0 ? (
                         <div className="image-grid">
                             {images.map((img, i) => (
-                                <div key={i} className="thumbnail-wrapper" onClick={(e) => handleThumbnailClick(e, img)}>
-                                    <img src={img} alt={`thumb-${i}`} className="thumbnail" />
+                                <div key={i} className="thumbnail-wrapper" onClick={(e) => {
+                                    e.stopPropagation()
+                                    onImagePreview(img)
+                                }}>
+                                    <img src={img} alt="" className="thumbnail" />
                                     {isSelected && (
                                         <button
                                             className="remove-image-btn"
-                                            onClick={(e) => handleRemoveImage(e, i)}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onImageRemove(row, col, i)
+                                            }}
                                         >
                                             &times;
                                         </button>
@@ -138,142 +91,48 @@ const Cell = memo(function Cell({
                                 </div>
                             ))}
                         </div>
-                    )}
-
-                    {(isSelected || images.length === 0) && (
-                        <button className="pair-btn" onClick={handlePairClick} title="Pair device">
-                            +
-                        </button>
+                    ) : (
+                        isSelected && (
+                            <button
+                                className="pair-btn" // Class for ignoring in selection logic
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onPairRequest(row, col)
+                                }}
+                                style={{
+                                    border: 'none', background: 'black', color: 'white',
+                                    borderRadius: '50%', width: '16px', height: '16px',
+                                    fontSize: '12px', cursor: 'pointer', display: 'flex',
+                                    alignItems: 'center', justifyContent: 'center'
+                                }}
+                            >
+                                +
+                            </button>
+                        )
                     )}
                 </div>
-
-                {isSelected && (
-                    <div
-                        className="fill-handle"
-                        onMouseDown={handleFillMouseDown}
-                    />
-                )}
-
-                <style>{`
-          .image-cell-content {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            padding: 4px;
-            gap: 4px;
-            overflow-x: auto;
-            overflow-y: hidden;
-          }
-          .image-grid {
-            display: flex;
-            gap: 4px;
-            height: 100%;
-            align-items: center;
-          }
-          .thumbnail-wrapper {
-            position: relative;
-            height: 32px;
-            width: 32px;
-            flex-shrink: 0;
-            cursor: zoom-in;
-          }
-          .thumbnail {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 4px;
-            border: 1px solid var(--border-color);
-            transition: transform 0.1s;
-          }
-          .thumbnail-wrapper:hover .thumbnail {
-             border-color: var(--border-selected);
-          }
-          .remove-image-btn {
-            position: absolute;
-            top: -6px;
-            right: -6px;
-            width: 14px;
-            height: 14px;
-            background: #ef4444;
-            color: white;
-            border: 1px solid white;
-            border-radius: 50%;
-            font-size: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 10;
-            opacity: 0;
-            transition: opacity 0.2s;
-          }
-          .thumbnail-wrapper:hover .remove-image-btn {
-            opacity: 1;
-          }
-          .pair-btn {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 1px dashed var(--text-secondary);
-            background: transparent;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 14px;
-            flex-shrink: 0;
-          }
-          .pair-btn:hover {
-            background: var(--bg-cell-hover);
-            border-color: var(--text-primary);
-            color: var(--text-primary);
-          }
-        `}</style>
             </div>
         )
     }
 
-    // --- Render Text Cell ---
+    // Text Cell
     return (
         <div
             className={className}
-            data-row={row}
-            data-col={col}
-            onClick={handleClick}
-            onDoubleClick={handleDoubleClick}
-            onMouseDown={handleMouseDown}
-            onMouseEnter={handleMouseEnter}
+            style={style}
+            onClick={(e) => onClick(row, col, e)}
+            onDoubleClick={() => onDoubleClick(row, col)}
+            onMouseDown={(e) => onMouseDown(row, col, e)}
+            onMouseEnter={() => onMouseEnter(row, col)}
         >
-            {isEditing ? (
-                <input
-                    ref={inputRef}
-                    className="cell-input"
-                    type="text"
-                    value={value}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    onKeyDown={(e) => {
-                        // Stop propagation for arrow keys if we want to allow cursor movement INSIDE input
-                        // But Excel usually navigates unless F2 mode. 
-                        // Here we simple: Left/Right inside input works, Up/Down might submit?
-                        // For now let event bubble to Spreadsheet for Enter/Arrows unless we stop it?
-                        // Actually Spreadsheet handleKeyDown is on window, so we must stopProp if we want input control.
-                        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation()
-                    }}
-                />
-            ) : (
-                <div ref={contentRef} className={contentClassName}>
-                    {value}
-                </div>
-            )}
-            {isSelected && !isEditing && (
-                <div
-                    className="fill-handle"
-                    onMouseDown={handleFillMouseDown}
-                />
-            )}
+            <div className="cell-content">
+                {displayValue}
+            </div>
+            {/* Fill handle if selected */}
+            {isSelected && !inRange && <div className="fill-handle" style={{
+                position: 'absolute', bottom: '-3px', right: '-3px', width: '6px', height: '6px',
+                background: 'black', cursor: 'crosshair', zIndex: 30
+            }} />}
         </div>
     )
 })

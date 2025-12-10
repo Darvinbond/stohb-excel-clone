@@ -1,369 +1,222 @@
 :root {
-  /* Light mode (default) */
   --bg-primary: #ffffff;
-  --bg-secondary: #fafafa;
-  --bg-cell: #ffffff;
-  --bg-cell-hover: #f5f5f5;
-  --bg-cell-selected: #e8f4ff;
-  --bg-header: #f6f8fa;
-  --border-color: #e5e7eb;
-  --border-selected: #0070f3;
-  --text-primary: #171717;
+  --bg-secondary: #f9fafb;
+  --text-primary: #111111;
   --text-secondary: #666666;
-  --text-header: #24292f;
-  --fill-handle: #0070f3;
-  --toggle-bg: #e5e7eb;
-  --toggle-knob: #ffffff;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --transition-fast: 150ms;
-  --transition-normal: 200ms;
-  --resize-handle: #d1d5db;
+  --border-color: #e5e7eb;
+  --accent-color: #000000;
+  --selection-color: rgba(0, 0, 0, 0.1);
+  --selection-border: #000;
 }
 
-[data-theme="dark"] {
-  --bg-primary: #0a0a0a;
+[data-theme='dark'] {
+  --bg-primary: #000000;
   --bg-secondary: #111111;
-  --bg-cell: #0a0a0a;
-  --bg-cell-hover: #1a1a1a;
-  --bg-cell-selected: #0d2847;
-  --bg-header: #141414;
-  --border-color: #2a2a2a;
-  --border-selected: #0070f3;
-  --text-primary: #ededed;
+  --text-primary: #ffffff;
   --text-secondary: #888888;
-  --text-header: #ededed;
-  --fill-handle: #0070f3;
-  --toggle-bg: #333333;
-  --toggle-knob: #0a0a0a;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --resize-handle: #444444;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
+  --border-color: #333333;
+  --accent-color: #ffffff;
+  --selection-color: rgba(255, 255, 255, 0.15);
+  --selection-border: #fff;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  transition: background-color var(--transition-normal), color var(--transition-normal);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  /* Prevent body scroll */
   overscroll-behavior-x: none;
-  /* Disable swipe nav */
 }
 
-/* App Container */
-.app {
-  height: 100%;
+#root {
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-primary);
+  height: 100vh;
 }
 
-/* Theme Toggle */
-.theme-toggle {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-sm);
-}
-
-.theme-toggle:hover {
-  background: var(--bg-cell-hover);
-  box-shadow: var(--shadow-md);
-}
-
-.theme-toggle svg {
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
-  transition: transform var(--transition-fast), color var(--transition-fast);
-}
-
-.theme-toggle:hover svg {
-  color: var(--text-primary);
-}
-
-.theme-toggle:active svg {
-  transform: scale(0.9);
-}
-
-/* Spreadsheet Container */
+/* Spreadsheet styling */
 .spreadsheet-container {
   flex: 1;
   overflow: auto;
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .spreadsheet {
   display: grid;
-  min-width: max-content;
   position: relative;
 }
 
-/* Header Row */
 .header-row {
   display: contents;
 }
 
-.header-cell {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  padding: 8px 12px;
-  background: var(--bg-header);
-  border-bottom: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--text-secondary);
-  user-select: none;
-  white-space: nowrap;
-  transition: background-color var(--transition-normal);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.header-cell:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 20;
-  min-width: 50px;
-  text-align: center;
-  background: var(--bg-header);
-  justify-content: center;
-}
-
-.header-cell-text {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Column Resize Handle */
-.resize-handle {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 6px;
-  height: 100%;
-  cursor: col-resize;
-  background: transparent;
-  z-index: 15;
-  transition: background-color var(--transition-fast);
-}
-
-.resize-handle:hover,
-.resize-handle.resizing {
-  background: var(--border-selected);
-}
-
-.resize-handle::after {
-  content: '';
-  position: absolute;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 16px;
-  background: var(--resize-handle);
-  border-radius: 1px;
-  cursor: auto;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.header-cell:hover .resize-handle::after,
-.resize-handle.resizing::after {
-  opacity: 1;
-}
-
-/* Row Number */
-.row-number {
-  position: sticky;
-  left: 0;
-  z-index: 5;
-  padding: 0 12px;
-  background: var(--bg-header);
-  border-bottom: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  font-size: 11px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-  min-width: 50px;
-  transition: background-color var(--transition-normal);
-}
-
-/* Data Row */
 .data-row {
   display: contents;
 }
 
-/* Cell */
-.cell {
-  position: relative;
-  padding: 0;
-  background: var(--bg-cell);
-  border-bottom: 1px solid var(--border-color);
+.header-cell,
+.cell,
+.row-number {
   border-right: 1px solid var(--border-color);
-  min-height: 32px;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 4px;
+  /* Tighter padding */
+  font-size: 13px;
+  /* Smaller font */
+  height: 24px;
+  /* Standard Excel height */
   display: flex;
   align-items: center;
-  cursor: cell;
-  transition: background-color var(--transition-fast);
-}
-
-.cell:hover {
-  background: var(--bg-cell-hover);
-}
-
-.cell.selected {
-  background: var(--bg-cell-selected);
-  outline: 2px solid var(--border-selected);
-  outline-offset: -2px;
-  z-index: 3;
-}
-
-.cell.in-range {
-  background: var(--bg-cell-selected);
-}
-
-/* Cell content with overflow */
-.cell-content {
-  position: relative;
-  height: 100%;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
+  background-color: var(--bg-primary);
   white-space: nowrap;
-  z-index: 1;
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  color: var(--text-primary);
+  cursor: cell;
 }
 
-/* Numeric Alignment */
-.cell.is-number .cell-content {
-  justify-content: flex-end;
-  text-align: right;
+/* Specific clipping for non-editing text */
+.cell-content {
+  overflow: hidden;
+  text-overflow: clip;
+  /* Don't add ellipses, just clip */
+  white-space: nowrap;
+  width: 100%;
+  pointer-events: none;
+  /* Let clicks pass to cell */
 }
 
-.cell.is-number .cell-input {
-  text-align: right;
+/* Allow overflow only when selected or specifically allowed */
+.cell.selected {
+  box-shadow: inset 0 0 0 1px var(--selection-border);
+  z-index: 5;
 }
 
-/* Overflow layer - shows content that extends beyond cell */
-.cell-content.has-overflow {
-  position: absolute;
-  left: 0;
+/* Range Selection */
+.cell.in-range {
+  background-color: var(--selection-color);
+}
+
+.cell.editing {
+  padding: 0;
+  overflow: visible;
+  z-index: 20;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.cell input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.header-cell {
+  background-color: var(--bg-secondary);
+  font-weight: 600;
+  position: sticky;
   top: 0;
-  background: var(--bg-cell);
-  z-index: 2;
+  z-index: 30;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.row-number {
+  background-color: var(--bg-secondary);
+  justify-content: center;
+  color: var(--text-secondary);
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  border-right: 2px solid var(--border-color);
+  cursor: default;
+  width: 40px;
+  /* Fixed width for row numbers */
+}
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 40;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background-color: var(--accent-color);
+}
+
+.cell.image-type {
+  padding: 0;
+  justify-content: center;
+}
+
+.image-cell-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-grid {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  align-items: center;
+}
+
+.thumbnail-wrapper {
+  height: 90%;
+  aspect-ratio: 1;
+  position: relative;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: 10px;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.image-placeholder {
+  color: var(--text-secondary);
+  font-size: 10px;
   pointer-events: none;
 }
 
-.cell:hover .cell-content.has-overflow,
-.cell.selected .cell-content.has-overflow {
-  background: inherit;
-}
-
-/* When a cell to the right is selected or hovered, hide overflow */
-.cell.hide-overflow .cell-content.has-overflow {
-  overflow: hidden;
-  width: 100%;
-}
-
-.cell-input {
-  width: 100%;
-  height: 100%;
-  padding: 6px 10px;
-  border: none;
-  outline: none;
-  background: var(--bg-cell);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: inherit;
-}
-
-/* Fill Handle */
-.fill-handle {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 8px;
-  height: 8px;
-  background: var(--fill-handle);
-  border: 1px solid var(--bg-primary);
-  border-radius: 1px;
-  cursor: crosshair;
-  opacity: 0;
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-  z-index: 10;
-}
-
-.cell.selected .fill-handle {
-  opacity: 1;
-}
-
-.fill-handle:hover {
-  transform: scale(1.2);
-}
-
-/* Scrollbar styling */
-.spreadsheet-container::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.spreadsheet-container::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
-
-.spreadsheet-container::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
-}
-
-.spreadsheet-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
-/* Resize cursor when dragging */
-body.col-resizing {
-  cursor: col-resize !important;
-  user-select: none;
-}
-
-body.col-resizing * {
-  cursor: col-resize !important;
+/* Utility */
+.text-right {
+  text-align: right;
+  justify-content: flex-end;
 }
