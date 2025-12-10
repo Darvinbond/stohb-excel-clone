@@ -16,7 +16,7 @@ export function useConnection(mode = 'provider') {
     useEffect(() => {
         const myId = generateShortId()
         const peer = new Peer(myId, {
-            debug: 3, // MAXIMUM DEBUG LEVEL
+            debug: 2,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
@@ -28,25 +28,33 @@ export function useConnection(mode = 'provider') {
         peerRef.current = peer
 
         peer.on('open', (id) => {
-            console.log('✅ [PeerJS] Connect to Server open, ID:', id)
+            console.log('✅ [PeerJS] ID:', id)
             setPeerId(id)
             setIsConnected(true)
         })
 
         peer.on('connection', (conn) => {
-            console.log('📥 [PeerJS] Incoming connection request from:', conn.peer)
+            // DEDUPLICATION: Check if we already have a connection from this peer
+            const existing = connectionsRef.current.find(c => c.peer === conn.peer)
+            if (existing) {
+                if (existing.open) {
+                    console.warn(`⚠️ [PeerJS] Rejecting duplicate connection from ${conn.peer}`)
+                    conn.close()
+                    return
+                } else {
+                    // Replace dead connection
+                    console.log(`♻️ [PeerJS] Replacing stale connection from ${conn.peer}`)
+                    connectionsRef.current = connectionsRef.current.filter(c => c.peer !== conn.peer)
+                }
+            }
+
+            console.log('📥 [PeerJS] Incoming connection:', conn.peer)
             setupConnection(conn, 'incoming')
         })
 
         peer.on('error', (err) => {
-            console.error('❌ [PeerJS] FATAL ERROR:', err)
-            console.error('Error Type:', err.type)
+            console.error('❌ [PeerJS] Error:', err.type)
             setConnectionError(`Error: ${err.type}`)
-        })
-
-        peer.on('disconnected', () => {
-            console.warn('⚠️ [PeerJS] Disconnected from signaling server')
-            setIsConnected(false)
         })
 
         return () => {
@@ -55,83 +63,56 @@ export function useConnection(mode = 'provider') {
     }, [])
 
     const setupConnection = useCallback((conn, direction = 'unknown') => {
-        console.log(`🔧 [PeerJS] Setting up ${direction} connection to ${conn.peer}...`)
-
-        // Attach deep WebRTC debugging when the underlying connection is available
-        // PeerJS creates this asynchronously, so we check or wait for it.
-        // We can hook into the 'open' event, but debugging ICE needs early access.
-        // Unfortunately standard PeerJS API hides the PC until it's created.
-
         conn.on('open', () => {
-            console.log(`✅ [PeerJS] DataChannel OPEN for ${conn.peer}`)
-            connectionsRef.current = [...connectionsRef.current, conn]
+            console.log(`✅ [PeerJS] Connected to ${conn.peer} (${direction})`)
+
+            // Add to list, ensuring uniqueness
+            connectionsRef.current = [
+                ...connectionsRef.current.filter(c => c.peer !== conn.peer),
+                conn
+            ]
             setConnections([...connectionsRef.current])
             setConnectionError(null)
-
-            // Try to access internal PC for stats (if implementation allows)
-            if (conn.peerConnection) {
-                conn.peerConnection.oniceconnectionstatechange = () => {
-                    console.log(`🧊 [WebRTC ICE] State change (${conn.peer}):`, conn.peerConnection.iceConnectionState)
-                }
-            }
         })
 
         conn.on('data', (data) => {
-            console.log(`📨 [PeerJS] DATA from ${conn.peer}:`, data)
             window.dispatchEvent(new CustomEvent('peer-data', {
                 detail: { data, peerId: conn.peer }
             }))
         })
 
         conn.on('close', () => {
-            console.warn(`🔌 [PeerJS] Connection CLOSED with ${conn.peer}`)
+            console.log(`🔌 [PeerJS] Closed: ${conn.peer}`)
             connectionsRef.current = connectionsRef.current.filter(c => c.peer !== conn.peer)
             setConnections([...connectionsRef.current])
         })
 
         conn.on('error', (err) => {
-            console.error(`❌ [PeerJS] Connection ERROR with ${conn.peer}:`, err)
-            setConnectionError(`Connection Failed: ${err}`)
+            console.error(`❌ Connection Error (${conn.peer}):`, err)
         })
 
-        // Debugging ICE state specifically if possible immediately
-        if (conn.peerConnection) {
-            console.log("Existing PC found, attaching listeners")
-            conn.peerConnection.oniceconnectionstatechange = () => {
-                console.log(`🧊 [WebRTC ICE] State change (${conn.peer}):`, conn.peerConnection.iceConnectionState)
-            }
-            conn.peerConnection.onicecandidate = (event) => {
-                console.log(`❄️ [WebRTC ICE] New Candidate:`, event.candidate ? event.candidate.candidate : '(End of candidates)')
-            }
-        }
     }, [])
 
     const connectToPeer = useCallback((targetId) => {
         if (!peerRef.current) return
 
-        console.log(`📤 [PeerJS] Initiating connection to: ${targetId}`)
+        // DEDUPLICATION: Don't connect if already connected
+        const existing = connectionsRef.current.find(c => c.peer === targetId)
+        if (existing && existing.open) {
+            console.log(`⚠️ Already connected to ${targetId}`)
+            return
+        }
+
+        console.log(`📤 [PeerJS] Connecting to: ${targetId}`)
         setConnectionError(null)
 
         try {
             const conn = peerRef.current.connect(targetId, {
-                reliable: true,
-                serialization: 'json'
+                reliable: true
             })
             setupConnection(conn, 'outgoing')
-
-            // Log if it hangs
-            setTimeout(() => {
-                if (!conn.open) {
-                    console.warn(`⚠️ [PeerJS] Connection to ${targetId} is taking longer than 5s...`)
-                    // Check ICE state if possible
-                    if (conn.peerConnection) {
-                        console.warn(`⚠️ [PeerJS] ICE State is: ${conn.peerConnection.iceConnectionState}`)
-                    }
-                }
-            }, 5000)
-
         } catch (e) {
-            console.error("❌ Exception during connect:", e)
+            console.error("Connect exception:", e)
             setConnectionError("Failed to initiate connection.")
         }
     }, [setupConnection])
@@ -143,10 +124,7 @@ export function useConnection(mode = 'provider') {
 
         targets.forEach(conn => {
             if (conn.open) {
-                // console.log(`📤 [PeerJS] Sending data to ${conn.peer}`) // Reduce spam
                 conn.send(data)
-            } else {
-                console.warn(`⚠️ [PeerJS] Cannot send, connection to ${conn.peer} is NOT OPEN`)
             }
         })
     }, [])
