@@ -22,81 +22,33 @@ function App() {
 
   if (!mode) {
     return (
-      <div className="app mode-selection">
+      <div className="flex items-center justify-center">
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
-        <div className="mode-card">
-          <h1>Choose Mode</h1>
-          <div className="mode-options">
+        <div className="bg-bg-secondary p-10 rounded-2xl border border-border-color shadow-lg text-center">
+          <h1 className="mb-6 text-2xl font-semibold">Choose Mode</h1>
+          <div className="flex gap-4">
             <button
-              className="mode-btn primary"
+              className="p-5 rounded-xl border border-border-color bg-text-primary text-bg-primary cursor-pointer w-40 flex flex-col gap-2 transition-all duration-200 hover:-translate-y-0.5"
               onClick={() => setMode('provider')}
             >
-              Spreadsheet
-              <small>View & Edit Data</small>
+              <span>Spreadsheet</span>
+              <small className="text-[11px] opacity-80">View & Edit Data</small>
             </button>
             <button
-              className="mode-btn secondary"
+              className="p-5 rounded-xl border border-border-color bg-bg-secondary text-text-primary cursor-pointer w-40 flex flex-col gap-2 transition-all duration-200 hover:-translate-y-0.5"
               onClick={() => setMode('receiver')}
             >
-              Camera
-              <small>Take Photos for Spreadsheet</small>
+              <span>Camera</span>
+              <small className="text-[11px] opacity-80">Take Photos for Spreadsheet</small>
             </button>
           </div>
         </div>
-        <style>{`
-          .mode-selection {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .mode-card {
-            background: var(--bg-cell);
-            padding: 40px;
-            border-radius: 16px;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-md);
-            text-align: center;
-          }
-          .mode-card h1 {
-            margin-bottom: 24px;
-            font-size: 24px;
-          }
-          .mode-options {
-            display: flex;
-            gap: 16px;
-          }
-          .mode-btn {
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            cursor: pointer;
-            width: 160px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            transition: all 0.2s;
-          }
-          .mode-btn:hover {
-            transform: translateY(-2px);
-            background: var(--bg-cell-hover);
-          }
-          .mode-btn.primary {
-            background: var(--text-header);
-            color: var(--bg-primary);
-          }
-          .mode-btn small {
-            font-size: 11px;
-            opacity: 0.8;
-          }
-        `}</style>
       </div>
     )
   }
 
   return (
-    <div className="app">
+    <div>
       {mode === 'provider' ? (
         <>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />

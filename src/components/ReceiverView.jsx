@@ -119,28 +119,28 @@ const ReceiverView = () => {
     }
 
     return (
-        <div className="receiver-container">
-            <div className="header">
-                <h1>📷 Stohb Cam</h1>
-                <div onClick={() => setShowHelp(!showHelp)} className="help-icon">?</div>
+        <div className="bg-[#0a0a0a] text-white h-screen flex flex-col font-sans">
+            <div className="p-4 flex justify-between items-center bg-[#111] border-b border-[#222]">
+                <h1 className="m-0 text-lg font-bold">📷 Stohb Cam</h1>
+                <div onClick={() => setShowHelp(!showHelp)} className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center font-bold cursor-pointer">?</div>
             </div>
 
             {step === 'connect' && (
-                <div className="connect-card">
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                     {showHelp ? (
-                        <div className="help-content">
-                            <h3>How to Connect</h3>
-                            <ol>
+                        <div className="max-w-md">
+                            <h3 className="text-xl font-bold mb-4">How to Connect</h3>
+                            <ol className="text-left space-y-2 mb-6">
                                 <li>Open <b>Stohb Sheet</b> on Laptop.</li>
                                 <li>Click the <b>+</b> button on any Image cell.</li>
                                 <li>Enter the <b>Code</b> below.</li>
                             </ol>
-                            <button className="close-help-btn" onClick={() => setShowHelp(false)}>Got it</button>
+                            <button className="w-full py-3 bg-white text-black font-semibold rounded-xl" onClick={() => setShowHelp(false)}>Got it</button>
                         </div>
                     ) : (
                         <>
-                            <h2>Pair Device</h2>
-                            <p className="subtext">Enter code from Spreadsheet</p>
+                            <h2 className="text-2xl font-bold mb-2">Pair Device</h2>
+                            <p className="text-gray-400 mb-6">Enter code from Spreadsheet</p>
 
                             <input
                                 type="text"
@@ -148,23 +148,23 @@ const ReceiverView = () => {
                                 onChange={(e) => setProviderCode(e.target.value.toUpperCase())}
                                 placeholder="CODE"
                                 maxLength={6}
-                                className={`code-input ${connectionError ? 'error-border' : ''}`}
+                                className={`text-[32px] p-4 w-full max-w-[280px] text-center uppercase bg-[#1a1a1a] border-2 ${connectionError ? 'border-red-500' : 'border-[#333]'} text-white rounded-2xl mb-6`}
                                 autoCapitalize="characters"
                                 disabled={isBusy}
                             />
 
-                            {connectionError && <p className="error-msg">⚠️ {connectionError}</p>}
+                            {connectionError && <p className="text-red-400 mb-5">⚠️ {connectionError}</p>}
 
                             <button
-                                className={`connect-btn ${isBusy ? 'loading' : ''}`}
+                                className={`w-full max-w-[280px] p-4 text-lg font-bold rounded-2xl border-none ${isBusy ? 'bg-[#333] text-white' : 'bg-white text-black'} cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
                                 onClick={handleConnect}
                                 disabled={providerCode.length < 4 || isBusy}
                             >
                                 {isBusy ? 'Connecting...' : 'Connect'}
                             </button>
 
-                            <div className="status-footer">
-                                <span className={`dot ${isConnected ? 'green' : 'red'}`}></span>
+                            <div className="mt-6 flex items-center gap-2 text-sm">
+                                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                 {isConnected ? 'Server Connected' : 'Connecting to Cloud...'}
                             </div>
                         </>
@@ -172,36 +172,22 @@ const ReceiverView = () => {
                 </div>
             )}
 
-            {step === 'waiting' && <div className="waiting-screen"><h1>Connected!</h1><div className="spinner"></div></div>}
-
-            {step === 'camera' && (
-                <div className="camera-interface">
-                    <video ref={videoRef} autoPlay playsInline className="camera-feed" />
-                    <canvas ref={canvasRef} style={{ display: 'none' }} />
-                    <div className="camera-controls">
-                        <button className="shutter-btn" onClick={takePicture} />
-                    </div>
+            {step === 'waiting' && (
+                <div className="flex flex-col items-center justify-center flex-1">
+                    <h1 className="text-3xl font-bold mb-4">Connected!</h1>
+                    <div className="w-10 h-10 border-4 border-[#333] border-t-white rounded-full animate-spin"></div>
                 </div>
             )}
 
-            <style>{`
-                .receiver-container { background: #0a0a0a; color: white; height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
-                .header { padding: 16px; display: flex; justify-content: space-between; align-items: center; background: #111; border-bottom: 1px solid #222; }
-                .header h1 { margin: 0; font-size: 18px; font-weight: 700; }
-                .help-icon { width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; }
-                .connect-card { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
-                .code-input { font-size: 32px; padding: 16px; width: 100%; max-width: 280px; text-align: center; text-transform: uppercase; background: #1a1a1a; border: 2px solid #333; color: white; border-radius: 16px; margin-bottom: 24px; }
-                .connect-btn { width: 100%; max-width: 280px; padding: 16px; font-size: 18px; font-weight: 700; border-radius: 16px; border: none; background: white; color: black; cursor: pointer; }
-                .connect-btn.loading { background: #333; color: white; }
-                .camera-interface { flex: 1; position: relative; background: black; }
-                .camera-feed { width: 100%; height: 100%; object-fit: cover; }
-                .camera-controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: center; }
-                .shutter-btn { width: 72px; height: 72px; border-radius: 50%; background: white; border: 4px solid rgba(0,0,0,0.1); }
-                .error-msg { color: #f87171; margin-bottom: 20px; }
-                 .wait-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; }
-                 .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top-color: white; border-radius: 50%; animation: spin 1s infinite linear; }
-                 @keyframes spin { to { transform: rotate(360deg); } }
-            `}</style>
+            {step === 'camera' && (
+                <div className="flex-1 relative bg-black">
+                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    <canvas ref={canvasRef} className="hidden" />
+                    <div className="absolute bottom-10 w-full flex justify-center">
+                        <button className="w-[72px] h-[72px] rounded-full bg-white border-4 border-black/10" onClick={takePicture} />
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

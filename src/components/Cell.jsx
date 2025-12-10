@@ -31,12 +31,14 @@ const Cell = memo(function Cell({
         }
     }, [isEditing])
 
-    const className = `cell 
-        ${isSelected ? 'selected' : ''} 
-        ${isEditing ? 'editing' : ''} 
-        ${inRange ? 'in-range' : ''}
-        ${type === 'image' ? 'image-type' : ''}
-    `.replace(/\s+/g, ' ')
+    const className = `
+        border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center bg-bg-primary
+        whitespace-nowrap overflow-hidden relative select-none text-text-primary cursor-cell
+        ${isSelected ? 'shadow-[inset_0_0_0_1px_var(--selection-border)] z-[5]' : ''}
+        ${isEditing ? 'p-0 overflow-visible z-[20] shadow-[0_0_0_2px_var(--accent-color)]' : ''}
+        ${inRange ? 'bg-selection-color' : ''}
+        ${type === 'image' ? 'p-0 justify-center' : ''}
+    `.trim().replace(/\s+/g, ' ')
 
     const style = {
         width: cellWidth,
@@ -49,9 +51,9 @@ const Cell = memo(function Cell({
                     ref={inputRef}
                     value={value}
                     onChange={(e) => onChange(row, col, e.target.value)}
-                    onBlur={() => onClick(-1, -1)} // Hacky way to stop editing, or parent handles blur?
-                    // Parent handles blur actually via click away, but we need to capture Keys
-                    onKeyDown={(e) => e.stopPropagation()} // Stop Spreadsheet global listener
+                    onBlur={() => onClick(-1, -1)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="w-full h-full border-none outline-none font-inherit text-inherit px-1 bg-bg-primary text-text-primary"
                 />
             </div>
         )
@@ -68,18 +70,22 @@ const Cell = memo(function Cell({
                 onMouseDown={(e) => onMouseDown(row, col, e)}
                 onMouseEnter={() => onMouseEnter(row, col)}
             >
-                <div className="image-cell-content">
+                <div className="w-full h-full flex items-center justify-center">
                     {images.length > 0 ? (
-                        <div className="image-grid">
+                        <div className="flex gap-0.5 h-full items-center">
                             {images.map((img, i) => (
-                                <div key={i} className="thumbnail-wrapper" onClick={(e) => {
-                                    e.stopPropagation()
-                                    onImagePreview(img)
-                                }}>
-                                    <img src={img} alt="" className="thumbnail" />
+                                <div
+                                    key={i}
+                                    className="h-[90%] aspect-square relative border border-border-color rounded-sm overflow-hidden"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onImagePreview(img)
+                                    }}
+                                >
+                                    <img src={img} alt="" className="w-full h-full object-cover" />
                                     {isSelected && (
                                         <button
-                                            className="remove-image-btn"
+                                            className="absolute top-0 right-0 bg-black/50 text-white text-[10px] border-none px-0.5 cursor-pointer leading-none"
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 onImageRemove(row, col, i)
@@ -125,14 +131,13 @@ const Cell = memo(function Cell({
             onMouseDown={(e) => onMouseDown(row, col, e)}
             onMouseEnter={() => onMouseEnter(row, col)}
         >
-            <div className="cell-content">
+            <div className="overflow-hidden whitespace-nowrap w-full pointer-events-none">
                 {displayValue}
             </div>
             {/* Fill handle if selected */}
-            {isSelected && !inRange && <div className="fill-handle" style={{
-                position: 'absolute', bottom: '-3px', right: '-3px', width: '6px', height: '6px',
-                background: 'black', cursor: 'crosshair', zIndex: 30
-            }} />}
+            {isSelected && !inRange && (
+                <div className="absolute -bottom-[3px] -right-[3px] w-1.5 h-1.5 bg-black cursor-crosshair z-30" />
+            )}
         </div>
     )
 })

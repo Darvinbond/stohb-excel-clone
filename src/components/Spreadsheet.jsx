@@ -421,11 +421,16 @@ const Spreadsheet = memo(function Spreadsheet() {
         const result = []
         for (let r = 0; r < numRows; r++) {
             result.push(
-                <div key={r} className="data-row">
-                    <div className="row-number" onClick={() => {
-                        setSelectedCell({ row: r, col: 0 })
-                        setSelectionRange({ startRow: r, startCol: 0, endRow: r, endCol: numCols - 1 })
-                    }}>{r + 1}</div>
+                <div key={r} className="contents">
+                    <div
+                        className="bg-bg-secondary justify-center text-text-secondary sticky left-0 z-20 border-r-2 border-border-color cursor-default w-10 border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center"
+                        onClick={() => {
+                            setSelectedCell({ row: r, col: 0 })
+                            setSelectionRange({ startRow: r, startCol: 0, endRow: r, endCol: numCols - 1 })
+                        }}
+                    >
+                        {r + 1}
+                    </div>
                     {COLUMNS.map((_, c) => {
                         const key = `${r}-${c}`
                         const cell = data[key] || createInitialCell(r, c)
@@ -477,15 +482,18 @@ const Spreadsheet = memo(function Spreadsheet() {
     }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handlePairRequest])
 
     return (
-        <div className="spreadsheet-container" ref={containerRef}>
-            <div className="spreadsheet" style={{ gridTemplateColumns }}>
+        <div className="flex-1 overflow-auto bg-bg-primary relative scrollbar-thin scrollbar-thumb-border-color scrollbar-track-transparent" ref={containerRef}>
+            <div className="grid relative" style={{ gridTemplateColumns }}>
                 {/* Header */}
-                <div className="header-row">
-                    <div className="header-cell"></div>
+                <div className="contents">
+                    <div className="border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default"></div>
                     {COLUMNS.map((col, i) => (
-                        <div key={i} className="header-cell">
+                        <div key={i} className="border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default">
                             {col}
-                            <div className={`resize-handle ${resizingCol === i ? 'resizing' : ''}`} onMouseDown={(e) => handleResizeStart(i, e)} />
+                            <div
+                                className={`absolute right-0 top-0 bottom-0 w-[5px] cursor-col-resize z-40 ${resizingCol === i ? 'bg-accent-color' : 'hover:bg-accent-color'}`}
+                                onMouseDown={(e) => handleResizeStart(i, e)}
+                            />
                         </div>
                     ))}
                 </div>
