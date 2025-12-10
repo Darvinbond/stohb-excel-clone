@@ -9,6 +9,7 @@ const Cell = memo(function Cell({
     isSelected,
     isEditing,
     inRange,
+    isAssigned,
     cellWidth,
     onClick,
     onDoubleClick,
@@ -17,26 +18,27 @@ const Cell = memo(function Cell({
     onMouseEnter,
     onImageRemove,
     onPairRequest,
-    onImagePreview
+    onImagePreview,
+    onFillHandleMouseDown
 }) {
     const inputRef = useRef(null)
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
             inputRef.current.focus()
-            // Cursor at end depends on interaction
-            // If type-to-overwrite, value is 1 char so cursor at end is natural
-            // If double-click, we want cursor at end? Logic is usually browser default or explicit selection
-            // We set value in SpreadSheet logic, so here we just focus
+            // Move cursor to end of text
+            const len = inputRef.current.value.length
+            inputRef.current.setSelectionRange(len, len)
         }
     }, [isEditing])
 
     const className = `
-        border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center bg-bg-primary
+        border-r border-b border-border-color px-0.5 text-[11px] h-5 flex items-center
         whitespace-nowrap overflow-hidden relative select-none text-text-primary cursor-cell
-        ${isSelected ? 'shadow-[inset_0_0_0_1px_var(--selection-border)] z-[5]' : ''}
-        ${isEditing ? 'p-0 overflow-visible z-[20] shadow-[0_0_0_2px_var(--accent-color)]' : ''}
-        ${inRange ? 'bg-selection-color' : ''}
+        ${isAssigned ? 'bg-emerald-100' : 'bg-bg-primary'}
+        ${isSelected ? 'shadow-[inset_0_0_0_2px_#1a73e8] z-5' : ''}
+        ${isEditing ? 'p-0 z-20 shadow-[0_0_0_2px_#1a73e8]' : ''}
+        ${inRange ? 'bg-blue-100' : ''}
         ${type === 'image' ? 'p-0 justify-center' : ''}
     `.trim().replace(/\s+/g, ' ')
 
@@ -52,8 +54,15 @@ const Cell = memo(function Cell({
                     value={value}
                     onChange={(e) => onChange(row, col, e.target.value)}
                     onBlur={() => onClick(-1, -1)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    className="w-full h-full border-none outline-none font-inherit text-inherit px-1 bg-bg-primary text-text-primary"
+                    onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') {
+                            onClick(-1, -1) // Stop editing
+                        } else if (e.key === 'Escape') {
+                            onClick(-1, -1) // Cancel editing
+                        }
+                    }}
+                    className="w-full h-full border-none outline-none px-0.5 bg-bg-primary text-text-primary text-[11px]"
                 />
             </div>
         )
@@ -98,18 +107,14 @@ const Cell = memo(function Cell({
                             ))}
                         </div>
                     ) : (
-                        isSelected && (
+                        isAssigned ? (
+                            <span className="text-emerald-600 text-xs font-medium">Ready</span>
+                        ) : (
                             <button
-                                className="pair-btn" // Class for ignoring in selection logic
+                                className="pair-btn border-none bg-black text-white rounded-full w-4 h-4 text-xs cursor-pointer flex items-center justify-center hover:bg-gray-700 transition-colors"
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     onPairRequest(row, col)
-                                }}
-                                style={{
-                                    border: 'none', background: 'black', color: 'white',
-                                    borderRadius: '50%', width: '16px', height: '16px',
-                                    fontSize: '12px', cursor: 'pointer', display: 'flex',
-                                    alignItems: 'center', justifyContent: 'center'
                                 }}
                             >
                                 +
@@ -125,18 +130,24 @@ const Cell = memo(function Cell({
     return (
         <div
             className={className}
-            style={style}
+            style={{ ...style, maxWidth: cellWidth }}
             onClick={(e) => onClick(row, col, e)}
             onDoubleClick={() => onDoubleClick(row, col)}
             onMouseDown={(e) => onMouseDown(row, col, e)}
             onMouseEnter={() => onMouseEnter(row, col)}
         >
-            <div className="overflow-hidden whitespace-nowrap w-full pointer-events-none">
+            <span className="block overflow-hidden text-ellipsis whitespace-nowrap w-full pointer-events-none">
                 {displayValue}
-            </div>
+            </span>
             {/* Fill handle if selected */}
-            {isSelected && !inRange && (
-                <div className="absolute -bottom-[3px] -right-[3px] w-1.5 h-1.5 bg-black cursor-crosshair z-30" />
+            {isSelected && (
+                <div
+                    className="absolute -bottom-[2px] -right-[2px] w-2 h-2 bg-[#1a73e8] cursor-crosshair z-30 border border-white"
+                    onMouseDown={(e) => {
+                        e.stopPropagation()
+                        onFillHandleMouseDown?.(row, col, e)
+                    }}
+                />
             )}
         </div>
     )

@@ -88,6 +88,11 @@ const Spreadsheet = memo(function Spreadsheet() {
     const [showCodePopup, setShowCodePopup] = useState(false)
     const [previewImage, setPreviewImage] = useState(null)
     const [connectedDevices, setConnectedDevices] = useState([])
+    const [assignedCells, setAssignedCells] = useState({}) // Track which cells have devices assigned { "row-col": deviceId }
+
+    // Fill handle drag state
+    const [isFilling, setIsFilling] = useState(false)
+    const [fillStartCell, setFillStartCell] = useState(null)
 
     const containerRef = useRef(null)
 
@@ -151,6 +156,8 @@ const Spreadsheet = memo(function Spreadsheet() {
                     const { row, col } = selectedCellRef.current
                     if (col === 0) { // Only assign if on Image column
                         sendData({ type: 'ASSIGN_CELL', payload: { row, col, currentCount: 0 } }, senderId)
+                        // Mark this cell as having an assigned device
+                        setAssignedCells(prev => ({ ...prev, [`${row}-${col}`]: senderId }))
                     }
                 }
             }
@@ -174,17 +181,20 @@ const Spreadsheet = memo(function Spreadsheet() {
             // Ignore special keys (Ctrl, Alt, Meta)
             if (e.ctrlKey || e.metaKey || e.altKey) return
 
+            // Skip typing in image column (col 0)
+            const isImageCol = selectedCell.col === 0
+
             // Key must be a printable character (length 1)
             // Also handle Backspace/Delete to clear
-            if (e.key.length === 1) {
-                // Focus cell and start editing with this key
+            if (e.key.length === 1 && !isImageCol) {
+                // Start editing with this key - overwrites current value
                 setEditingCell(selectedCell)
-                // We pass the key to the Cell component via state or update immediately?
-                // Updating immediately is better UX -> Overwrite
                 updateCell(selectedCell.row, selectedCell.col, e.key)
                 e.preventDefault()
-            } else if (e.key === 'Backspace' || e.key === 'Delete') {
+            } else if ((e.key === 'Backspace' || e.key === 'Delete') && !isImageCol) {
+                // Clear cell
                 updateCell(selectedCell.row, selectedCell.col, '')
+                e.preventDefault()
             } else if (e.key === 'Enter') {
                 // Move down
                 e.preventDefault()
@@ -345,19 +355,51 @@ const Spreadsheet = memo(function Spreadsheet() {
     }, [])
 
     const handleCellMouseEnter = useCallback((row, col) => {
-        if (isSelecting) {
+        if (isSelecting || isFilling) {
             setSelectionRange(prev => {
                 if (!prev) return null
                 return { ...prev, endRow: row, endCol: col }
             })
         }
-    }, [isSelecting])
+    }, [isSelecting, isFilling])
 
     useEffect(() => {
-        const stopSelecting = () => setIsSelecting(false)
-        window.addEventListener('mouseup', stopSelecting)
-        return () => window.removeEventListener('mouseup', stopSelecting)
-    }, [])
+        const handleMouseUp = () => {
+            // Handle fill on mouse up
+            if (isFilling && fillStartCell && selectionRange) {
+                const sourceValue = data[`${fillStartCell.row}-${fillStartCell.col}`]?.rawValue || ''
+                if (sourceValue && fillStartCell.col !== 0) { // Don't fill image column
+                    setData(prev => {
+                        pushHistory(prev)
+                        const newData = { ...prev }
+                        const { startRow, endRow, startCol, endCol } = selectionRange
+                        const minR = Math.min(startRow, endRow), maxR = Math.max(startRow, endRow)
+                        const minC = Math.min(startCol, endCol), maxC = Math.max(startCol, endCol)
+
+                        for (let r = minR; r <= maxR; r++) {
+                            for (let c = minC; c <= maxC; c++) {
+                                if (c === 0) continue // Skip image column
+                                const key = `${r}-${c}`
+                                const cell = newData[key] || createInitialCell(r, c)
+                                newData[key] = {
+                                    ...cell,
+                                    rawValue: sourceValue,
+                                    displayValue: sourceValue,
+                                    type: isNaN(Number(sourceValue)) ? 'text' : 'number'
+                                }
+                            }
+                        }
+                        return newData
+                    })
+                }
+            }
+            setIsSelecting(false)
+            setIsFilling(false)
+            setFillStartCell(null)
+        }
+        window.addEventListener('mouseup', handleMouseUp)
+        return () => window.removeEventListener('mouseup', handleMouseUp)
+    }, [isFilling, fillStartCell, selectionRange, data, pushHistory])
 
     // -- Column Resize --
     const handleResizeStart = useCallback((colIndex, e) => {
@@ -410,11 +452,19 @@ const Spreadsheet = memo(function Spreadsheet() {
         setShowCodePopup(true)
     }, [])
 
+    // Fill handle drag start
+    const handleFillHandleMouseDown = useCallback((row, col, e) => {
+        e.preventDefault()
+        setIsFilling(true)
+        setFillStartCell({ row, col })
+        setSelectionRange({ startRow: row, startCol: col, endRow: row, endCol: col })
+    }, [])
+
 
     // -- Render --
     const gridTemplateColumns = useMemo(() => {
         const colWidths = COLUMNS.map((_, i) => `${columnWidths[i] || (i === 0 ? 80 : DEFAULT_COL_WIDTH)}px`).join(' ')
-        return `40px ${colWidths}` // Row header width 40px
+        return `32px ${colWidths}` // Row header width 32px
     }, [columnWidths])
 
     const rows = useMemo(() => {
@@ -423,7 +473,7 @@ const Spreadsheet = memo(function Spreadsheet() {
             result.push(
                 <div key={r} className="contents">
                     <div
-                        className="bg-bg-secondary justify-center text-text-secondary sticky left-0 z-20 border-r-2 border-border-color cursor-default w-10 border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center"
+                        className="bg-bg-secondary justify-center text-text-secondary sticky left-0 z-20 border-r-2 border-border-color cursor-default w-8 border-b border-border-color px-0.5 text-[10px] h-5 flex items-center"
                         onClick={() => {
                             setSelectedCell({ row: r, col: 0 })
                             setSelectionRange({ startRow: r, startCol: 0, endRow: r, endCol: numCols - 1 })
@@ -452,17 +502,20 @@ const Spreadsheet = memo(function Spreadsheet() {
 
                         const cellWidth = columnWidths[c] || (c === 0 ? 80 : DEFAULT_COL_WIDTH)
 
+                        const isAssigned = !!assignedCells[key]
+
                         return (
                             <Cell
                                 key={key}
                                 row={r}
                                 col={c}
-                                value={cell.rawValue} // Pass raw for editing
-                                displayValue={cell.displayValue} // Pass display for viewing
-                                type={c === 0 ? 'image' : 'text'} // Simplified type
+                                value={cell.rawValue}
+                                displayValue={cell.displayValue}
+                                type={c === 0 ? 'image' : 'text'}
                                 isSelected={isSelected}
                                 isEditing={isEditing}
                                 inRange={inRange}
+                                isAssigned={isAssigned}
                                 cellWidth={cellWidth}
                                 onClick={handleCellClick}
                                 onDoubleClick={handleCellDoubleClick}
@@ -472,6 +525,7 @@ const Spreadsheet = memo(function Spreadsheet() {
                                 onImageRemove={handleImageRemove}
                                 onPairRequest={handlePairRequest}
                                 onImagePreview={setPreviewImage}
+                                onFillHandleMouseDown={handleFillHandleMouseDown}
                             />
                         )
                     })}
@@ -479,19 +533,19 @@ const Spreadsheet = memo(function Spreadsheet() {
             )
         }
         return result
-    }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handlePairRequest])
+    }, [numRows, data, selectedCell, editingCell, selectionRange, columnWidths, assignedCells, handleCellClick, handleCellDoubleClick, updateCell, handleCellMouseDown, handleCellMouseEnter, handleImageRemove, handlePairRequest, handleFillHandleMouseDown])
 
     return (
         <div className="flex-1 overflow-auto bg-bg-primary relative scrollbar-thin scrollbar-thumb-border-color scrollbar-track-transparent" ref={containerRef}>
             <div className="grid relative" style={{ gridTemplateColumns }}>
                 {/* Header */}
                 <div className="contents">
-                    <div className="border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default"></div>
+                    <div className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default"></div>
                     {COLUMNS.map((col, i) => (
-                        <div key={i} className="border-r border-b border-border-color px-1 text-[13px] h-6 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default">
+                        <div key={i} className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold sticky top-0 z-30 justify-center text-text-secondary cursor-default">
                             {col}
                             <div
-                                className={`absolute right-0 top-0 bottom-0 w-[5px] cursor-col-resize z-40 ${resizingCol === i ? 'bg-accent-color' : 'hover:bg-accent-color'}`}
+                                className={`absolute right-0 top-0 bottom-0 w-[4px] cursor-col-resize z-40 ${resizingCol === i ? 'bg-accent-color' : 'hover:bg-accent-color'}`}
                                 onMouseDown={(e) => handleResizeStart(i, e)}
                             />
                         </div>
@@ -506,7 +560,10 @@ const Spreadsheet = memo(function Spreadsheet() {
                     code={peerId}
                     onClose={() => setShowCodePopup(false)}
                     onAssign={(id) => {
-                        if (selectedCell) sendData({ type: 'ASSIGN_CELL', payload: { row: selectedCell.row, col: selectedCell.col, currentCount: 0 } }, id)
+                        if (selectedCell) {
+                            sendData({ type: 'ASSIGN_CELL', payload: { row: selectedCell.row, col: selectedCell.col, currentCount: 0 } }, id)
+                            setAssignedCells(prev => ({ ...prev, [`${selectedCell.row}-${selectedCell.col}`]: id }))
+                        }
                         setShowCodePopup(false)
                     }}
                     currentCell={selectedCell}
