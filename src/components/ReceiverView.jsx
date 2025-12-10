@@ -5,17 +5,29 @@ const ReceiverView = () => {
     const [providerCode, setProviderCode] = useState('')
     const [step, setStep] = useState('connect')
     const [assignedCell, setAssignedCell] = useState(null)
+    const [error, setError] = useState('')
     const videoRef = useRef(null)
     const canvasRef = useRef(null)
 
-    const { peerId, sendData, isConnected } = useConnection('receiver')
+    const { peerId, connectToPeer, sendData, isConnected, connections } = useConnection('receiver')
 
-    // On connect (valid code entered)
-    const handleConnect = () => {
-        if (providerCode.length >= 6) {
+    // Watch for successful connection
+    useEffect(() => {
+        if (connections.length > 0 && step === 'connect') {
+            console.log('Connection established, sending GREET')
             setStep('waiting')
-            // Send GREET to trigger assignment
-            sendData({ type: 'GREET' }, providerCode)
+            // Send GREET after connection is established
+            setTimeout(() => {
+                sendData({ type: 'GREET' })
+            }, 500)
+        }
+    }, [connections, step, sendData])
+
+    const handleConnect = () => {
+        if (providerCode.length >= 4) {
+            setError('')
+            console.log('Attempting to connect to:', providerCode)
+            connectToPeer(providerCode.toUpperCase())
         }
     }
 
@@ -23,6 +35,8 @@ const ReceiverView = () => {
     useEffect(() => {
         const handleData = (event) => {
             const { type, payload } = event.detail.data || {}
+            console.log('Receiver got:', type, payload)
+
             if (type === 'ASSIGN_CELL') {
                 setAssignedCell(payload)
                 setStep('camera')
@@ -43,16 +57,17 @@ const ReceiverView = () => {
             }
         } catch (err) {
             console.error("Camera error:", err)
-            // Error handling already covered by HTTPS
+            setError("Camera access denied. Please allow camera access.")
         }
     }
 
     const takePicture = () => {
-        if (!videoRef.current || !canvasRef.current) return
+        if (!videoRef.current || !canvasRef.current || !assignedCell) return
+
         const video = videoRef.current
         const canvas = canvasRef.current
 
-        const MAX_SIZE = 1024
+        const MAX_SIZE = 800
         let width = video.videoWidth
         let height = video.videoHeight
 
@@ -72,9 +87,10 @@ const ReceiverView = () => {
         canvas.height = height
         const context = canvas.getContext('2d')
         context.drawImage(video, 0, 0, width, height)
-        const imageData = canvas.toDataURL('image/jpeg', 0.6)
+        const imageData = canvas.toDataURL('image/jpeg', 0.5)
 
-        // Send to provider
+        console.log('Sending image, size:', imageData.length)
+
         sendData({
             type: 'IMAGE_DATA',
             payload: {
@@ -82,26 +98,27 @@ const ReceiverView = () => {
                 col: assignedCell.col,
                 image: imageData
             }
-        }, providerCode)
+        })
 
         setAssignedCell(prev => ({
             ...prev,
-            currentCount: prev.currentCount + 1
+            currentCount: (prev.currentCount || 0) + 1
         }))
     }
 
     return (
         <div className="receiver-container">
             <div className="header">
-                <h1>Stohb Cam</h1>
-                <div className="status-badge" style={{ background: isConnected ? '#4ade80' : '#f87171' }}>
-                    {isConnected ? 'Online' : 'Offline'}
+                <h1>📷 Stohb Cam</h1>
+                <div className="status-badge" style={{ background: connections.length > 0 ? '#4ade80' : '#f87171' }}>
+                    {connections.length > 0 ? '🟢 Connected' : '🔴 Not Connected'}
                 </div>
             </div>
 
             {step === 'connect' && (
                 <div className="connect-card">
                     <h2>Pair Device</h2>
+                    <p>Enter the code from the spreadsheet</p>
                     <input
                         type="text"
                         value={providerCode}
@@ -109,23 +126,26 @@ const ReceiverView = () => {
                         placeholder="ENTER CODE"
                         maxLength={6}
                         className="code-input"
+                        autoCapitalize="characters"
                     />
+                    {error && <p className="error">{error}</p>}
                     <button
                         className="connect-btn"
                         onClick={handleConnect}
-                        disabled={providerCode.length < 6}
+                        disabled={providerCode.length < 4}
                     >
                         Connect
                     </button>
-                    <p className="hint">Ensure Code matches Spreadsheet</p>
+                    <p className="hint">Your ID: {peerId || '...'}</p>
                 </div>
             )}
 
             {step === 'waiting' && (
                 <div className="waiting-screen">
-                    <div className="pulse-ring"></div>
-                    <h2>Connected</h2>
-                    <p>Waiting for assignment...</p>
+                    <div className="spinner"></div>
+                    <h2>✅ Connected!</h2>
+                    <p>Waiting for cell assignment...</p>
+                    <small>Click an Image cell on the spreadsheet</small>
                 </div>
             )}
 
@@ -133,24 +153,42 @@ const ReceiverView = () => {
                 <div className="camera-interface">
                     <video ref={videoRef} autoPlay playsInline className="camera-feed" />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    <div className="camera-overlay">
+                        <div className="counter-pill">
+                            📸 {assignedCell?.currentCount || 0} / 4
+                        </div>
+                    </div>
                     <div className="camera-controls">
-                        <button className="shutter-btn" onClick={takePicture} disabled={assignedCell?.currentCount >= 4} />
+                        <button
+                            className="shutter-btn"
+                            onClick={takePicture}
+                            disabled={(assignedCell?.currentCount || 0) >= 4}
+                        />
                     </div>
                 </div>
             )}
 
             <style>{`
-                .receiver-container { background: black; color: white; height: 100vh; display: flex; flex-direction: column; }
-                .header { padding: 16px; display: flex; justify-content: space-between; }
-                .status-badge { padding: 4px 8px; border-radius: 4px; color: black; font-weight: bold; }
-                .connect-card, .waiting-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-                .code-input { font-size: 24px; padding: 12px; margin: 20px; text-align: center; text-transform: uppercase; width: 200px; }
-                .connect-btn { padding: 12px 30px; font-size: 18px; background: white; border: none; border-radius: 30px; }
-                .camera-interface { flex: 1; position: relative; }
+                .receiver-container { background: #111; color: white; height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
+                .header { padding: 16px; display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; }
+                .header h1 { margin: 0; font-size: 20px; }
+                .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+                .connect-card, .waiting-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+                .code-input { font-size: 32px; padding: 16px; margin: 24px 0; text-align: center; text-transform: uppercase; width: 240px; border-radius: 12px; border: 2px solid #333; background: #222; color: white; letter-spacing: 8px; }
+                .connect-btn { padding: 16px 48px; font-size: 18px; background: white; color: black; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; }
+                .connect-btn:disabled { opacity: 0.5; }
+                .error { color: #f87171; margin: 8px 0; }
+                .hint { margin-top: 24px; color: #666; font-size: 12px; }
+                .spinner { width: 48px; height: 48px; border: 4px solid #333; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 24px; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                .camera-interface { flex: 1; position: relative; background: black; }
                 .camera-feed { width: 100%; height: 100%; object-fit: cover; }
+                .camera-overlay { position: absolute; top: 20px; right: 20px; }
+                .counter-pill { background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 20px; font-weight: bold; }
                 .camera-controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: center; }
-                .shutter-btn { width: 70px; height: 70px; border-radius: 50%; background: white; border: 4px solid #ccc; }
-                .hint { margin-top: 10px; color: #888; }
+                .shutter-btn { width: 80px; height: 80px; border-radius: 50%; background: white; border: 6px solid rgba(255,255,255,0.3); cursor: pointer; transition: transform 0.1s; }
+                .shutter-btn:active { transform: scale(0.9); }
+                .shutter-btn:disabled { opacity: 0.5; }
             `}</style>
         </div>
     )

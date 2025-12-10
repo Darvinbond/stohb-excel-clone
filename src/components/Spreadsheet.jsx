@@ -71,7 +71,6 @@ const Spreadsheet = memo(function Spreadsheet() {
     const [history, setHistory] = useState([])
     const [redoStack, setRedoStack] = useState([])
 
-    // ... history logic ...
     const pushHistory = useCallback((currentData) => {
         setHistory(prev => {
             const newHist = [...prev, currentData]
@@ -92,7 +91,7 @@ const Spreadsheet = memo(function Spreadsheet() {
     })
 
     const [selectedCell, setSelectedCell] = useState(null)
-    const selectedCellRef = useRef(selectedCell) // Ref to track latest selectedCell
+    const selectedCellRef = useRef(selectedCell)
 
     useEffect(() => {
         selectedCellRef.current = selectedCell
@@ -107,9 +106,15 @@ const Spreadsheet = memo(function Spreadsheet() {
 
     const [showCodePopup, setShowCodePopup] = useState(false)
     const [previewImage, setPreviewImage] = useState(null)
+    const [connectedDevices, setConnectedDevices] = useState([])
 
     const containerRef = useRef(null)
-    const { peerId, sendData } = useConnection('provider')
+    const { peerId, sendData, connections } = useConnection('provider')
+
+    // Track connected devices
+    useEffect(() => {
+        setConnectedDevices(connections.map(c => c.peer))
+    }, [connections])
 
     const numRows = INITIAL_ROWS
     const numCols = COLUMNS.length
@@ -122,7 +127,6 @@ const Spreadsheet = memo(function Spreadsheet() {
         localStorage.setItem('spreadsheet_widths', JSON.stringify(columnWidths))
     }, [columnWidths])
 
-    // Recalc function
     const recalculateAll = useCallback((currentData) => {
         const newData = { ...currentData }
         let changed = false
@@ -149,30 +153,31 @@ const Spreadsheet = memo(function Spreadsheet() {
     useEffect(() => {
         const handleData = (event) => {
             const { type, payload } = event.detail.data || {}
+            const senderId = event.detail.peerId
+
+            console.log('📨 Spreadsheet received:', type, 'from', senderId)
 
             if (type === 'IMAGE_DATA') {
                 const { row, col, image } = payload
+                console.log('🖼️ Adding image to cell', row, col)
                 setData(prev => {
                     const key = `${row}-${col}`
                     const currentCell = prev[key] || createInitialCell(row, col)
                     const currentImages = Array.isArray(currentCell.rawValue) ? currentCell.rawValue : []
                     if (currentImages.length >= 4) return prev
                     const newImages = [...currentImages, image]
-                    const newData = {
+                    return {
                         ...prev,
                         [key]: { ...currentCell, rawValue: newImages, displayValue: newImages }
                     }
-                    return newData
                 })
             }
 
             if (type === 'GREET') {
-                // Sender tells us "I am here"
-                // We respond with ASSIGN if we have a cell selected (and popup presumably open)
-                const senderId = event.detail.peerId
+                console.log('👋 Device greeted:', senderId)
                 const target = selectedCellRef.current
-                if (senderId && target) {
-                    console.log("Auto-assigning device:", senderId, target)
+                if (target) {
+                    console.log('📤 Auto-assigning to cell:', target)
                     sendData({
                         type: 'ASSIGN_CELL',
                         payload: { row: target.row, col: target.col, currentCount: 0 }
@@ -183,9 +188,9 @@ const Spreadsheet = memo(function Spreadsheet() {
 
         window.addEventListener('peer-data', handleData)
         return () => window.removeEventListener('peer-data', handleData)
-    }, [sendData]) // sendData is stable
+    }, [sendData])
 
-    // ... Standard Handlers ...
+    // Standard Handlers
     const handleResizeStart = useCallback((colIndex, e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -244,12 +249,9 @@ const Spreadsheet = memo(function Spreadsheet() {
 
     const handleAssignDevice = useCallback((targetPeerId) => {
         if (!selectedCell) return
-        if (targetPeerId) {
-            const { row, col } = selectedCell
-            // Just send manual assign if needed, but auto-assign via GREET covers most cases
-            sendData({ type: 'ASSIGN_CELL', payload: { row, col, currentCount: 0 } }, targetPeerId)
-            setShowCodePopup(false)
-        }
+        const { row, col } = selectedCell
+        sendData({ type: 'ASSIGN_CELL', payload: { row, col, currentCount: 0 } }, targetPeerId)
+        setShowCodePopup(false)
     }, [selectedCell, sendData])
 
     const handleImageRemove = useCallback((row, col, index) => {
@@ -383,6 +385,7 @@ const Spreadsheet = memo(function Spreadsheet() {
                     onClose={() => setShowCodePopup(false)}
                     onAssign={handleAssignDevice}
                     currentCell={selectedCell}
+                    connectedDevices={connectedDevices}
                 />
             )}
 
