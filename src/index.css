@@ -12,8 +12,8 @@
   --border-color: #eaeaea;
   --accent-color: #000000;
   --accent-fg: #ffffff;
-  --selection-color: rgba(0, 0, 0, 0.1);
-  --selection-border: #000000;
+  --selection-color: #e0f2fe; /* Light blue (Tailwind sky-100ish) */
+  --selection-border: #0ea5e9; /* Sky-500 */
   --success: #0070f3;
   --error: #e00;
   --warning: #f5a623;
@@ -36,8 +36,8 @@
   --border-color: #333333;
   --accent-color: #ffffff;
   --accent-fg: #000000;
-  --selection-color: rgba(255, 255, 255, 0.15);
-  --selection-border: #ffffff;
+  --selection-color: rgba(14, 165, 233, 0.2); /* Dark mode blue tint */
+  --selection-border: #38bdf8;
   --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 8px rgba(0,0,0,0.4);
   --shadow-lg: 0 8px 16px rgba(0,0,0,0.6);
@@ -50,6 +50,8 @@ body {
   color: var(--text-primary);
   overflow: hidden;
   overscroll-behavior-x: none;
+  overscroll-behavior-y: none; /* Disable pull-to-refresh etc */
+  touch-action: pan-x pan-y; /* Disable swipe navigation gestures */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -38,7 +38,7 @@ function createInitialData(rows, cols) {
     return data
 }
 
-const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
+const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme, installPrompt, onInstall }) {
     // 1. STATE
     const [data, setData] = useState(() => {
         try {
@@ -90,6 +90,7 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
     const [fillStartCell, setFillStartCell] = useState(null)
 
     const containerRef = useRef(null)
+    const dataRef = useRef(data)
 
     // Hooks
     const { peerId, sendData, connections } = useConnection('provider')
@@ -99,6 +100,7 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
 
     // Ref Sync & Connection State
     useEffect(() => { selectedCellRef.current = selectedCell }, [selectedCell])
+    useEffect(() => { dataRef.current = data }, [data])
     useEffect(() => { setConnectedDevices(connections.map(c => c.peer)) }, [connections])
 
     // Persistence
@@ -171,6 +173,19 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
             if (editingCell) return
             if (isDeviceManagerOpen || previewImage) return
             if (!selectedCell) return
+            // Ctrl+A: Select All
+            if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+                e.preventDefault()
+                setSelectedCell({ row: 0, col: 0 })
+                setSelectionRange({
+                    startRow: 0,
+                    startCol: 0,
+                    endRow: numRows - 1,
+                    endCol: numCols - 1
+                })
+                return
+            }
+
             if (e.ctrlKey || e.metaKey || e.altKey) return
 
             const isImageCol = selectedCell.col === 0
@@ -179,9 +194,38 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
                 setEditingCell(selectedCell)
                 updateCell(selectedCell.row, selectedCell.col, e.key)
                 e.preventDefault()
-            } else if ((e.key === 'Backspace' || e.key === 'Delete') && !isImageCol) {
-                updateCell(selectedCell.row, selectedCell.col, '')
+            } else if (e.key === 'Backspace' || e.key === 'Delete') {
                 e.preventDefault()
+                
+                // Bulk delete support
+                let r1 = selectedCell.row, c1 = selectedCell.col
+                let r2 = selectedCell.row, c2 = selectedCell.col
+
+                if (selectionRange) {
+                    r1 = Math.min(selectionRange.startRow, selectionRange.endRow)
+                    r2 = Math.max(selectionRange.startRow, selectionRange.endRow)
+                    c1 = Math.min(selectionRange.startCol, selectionRange.endCol)
+                    c2 = Math.max(selectionRange.startCol, selectionRange.endCol)
+                }
+
+                setData(prev => {
+                    pushHistory(prev)
+                    const newData = { ...prev }
+                    for (let r = r1; r <= r2; r++) {
+                        for (let c = c1; c <= c2; c++) {
+                            const key = `${r}-${c}`
+                            const cell = newData[key] || createInitialCell(r, c)
+                            // Reset value based on type (empty array for images, empty string for text)
+                            const isImg = c === 0
+                            newData[key] = { 
+                                ...cell, 
+                                rawValue: isImg ? [] : '', 
+                                displayValue: isImg ? [] : '' 
+                            }
+                        }
+                    }
+                    return newData
+                })
             } else if (e.key === 'Enter') {
                 e.preventDefault()
                 const nextRow = Math.min(numRows - 1, selectedCell.row + 1)
@@ -215,7 +259,131 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedCell, editingCell, isDeviceManagerOpen, previewImage, updateCell, numRows, numCols])
+    }, [selectedCell, selectionRange, editingCell, isDeviceManagerOpen, previewImage, updateCell, numRows, numCols])
+
+    // -- Clipboard: Copy/Paste --
+    useEffect(() => {
+        const handleCopy = (e) => {
+            if (editingCell) return
+            if (!selectedCell) return
+
+            // Determine range
+            let r1 = selectedCell.row, c1 = selectedCell.col
+            let r2 = selectedCell.row, c2 = selectedCell.col
+
+            if (selectionRange) {
+                r1 = Math.min(selectionRange.startRow, selectionRange.endRow)
+                r2 = Math.max(selectionRange.startRow, selectionRange.endRow)
+                c1 = Math.min(selectionRange.startCol, selectionRange.endCol)
+                c2 = Math.max(selectionRange.startCol, selectionRange.endCol)
+            }
+
+            // Build TSV string
+            let text = ''
+            for (let r = r1; r <= r2; r++) {
+                const rowVals = []
+                for (let c = c1; c <= c2; c++) {
+                    const cell = dataRef.current[`${r}-${c}`]
+                    let val = cell ? cell.rawValue : ''
+                    
+                    // If image array, serialize it so we can paste it back later
+                    if (Array.isArray(val)) {
+                        val = JSON.stringify(val)
+                    }
+                    rowVals.push(val)
+                }
+                text += rowVals.join('\t') + (r < r2 ? '\n' : '')
+            }
+
+            e.clipboardData.setData('text/plain', text)
+            e.preventDefault()
+        }
+
+        const handlePaste = (e) => {
+            if (editingCell) return
+            if (!selectedCell) return
+            e.preventDefault()
+
+            const text = e.clipboardData.getData('text/plain')
+            if (!text) return
+
+            const rows = text.split(/\r\n|\n|\r/)
+            if (rows.length === 0) return
+
+            const startRow = selectedCell.row
+            const startCol = selectedCell.col
+
+            let maxRowOffset = 0
+            let maxColOffset = 0
+
+            setData(prev => {
+                pushHistory(prev)
+                const newData = { ...prev }
+
+                rows.forEach((rowStr, i) => {
+                    const r = startRow + i
+                    if (r >= numRows) return
+                    if (i > maxRowOffset) maxRowOffset = i
+                    
+                    const cols = rowStr.split('\t')
+                    cols.forEach((val, j) => {
+                        const c = startCol + j
+                        if (c >= numCols) return
+                        if (j > maxColOffset) maxColOffset = j
+                        
+                        const key = `${r}-${c}`
+                        const cell = newData[key] || createInitialCell(r, c)
+
+                        if (c === 0) {
+                            // Image Column Paste Logic
+                            try {
+                                // Try parsing as JSON array (from our own copy)
+                                const parsed = JSON.parse(val)
+                                if (Array.isArray(parsed)) {
+                                    newData[key] = { ...cell, rawValue: parsed, displayValue: parsed, type: 'image' }
+                                    return
+                                }
+                            } catch (err) {
+                                // Not JSON, might be raw url?
+                            }
+                            
+                            // Check for direct data URL
+                            if (typeof val === 'string' && (val.startsWith('data:image') || val.startsWith('http'))) {
+                                const newArr = [val]
+                                newData[key] = { ...cell, rawValue: newArr, displayValue: newArr, type: 'image' }
+                            }
+                            // Ignore plain text in image column
+                        } else {
+                            // Normal Text/Number Column
+                            const type = isNaN(Number(val)) || val === '' ? 'text' : 'number'
+                            newData[key] = {
+                                ...cell,
+                                rawValue: val,
+                                displayValue: val,
+                                type
+                            }
+                        }
+                    })
+                })
+                return newData
+            })
+
+            // Highlight pasted range
+            setSelectionRange({
+                startRow: startRow,
+                startCol: startCol,
+                endRow: Math.min(numRows - 1, startRow + maxRowOffset),
+                endCol: Math.min(numCols - 1, startCol + maxColOffset)
+            })
+        }
+
+        document.addEventListener('copy', handleCopy)
+        document.addEventListener('paste', handlePaste)
+        return () => {
+            document.removeEventListener('copy', handleCopy)
+            document.removeEventListener('paste', handlePaste)
+        }
+    }, [selectedCell, selectionRange, editingCell, numRows, numCols, pushHistory]) // Removed 'data' dependency
 
     // -- Mouse Interactions --
     const handleCellClick = useCallback((row, col, e) => {
@@ -260,8 +428,13 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
     useEffect(() => {
         const handleMouseUp = () => {
             if (isFilling && fillStartCell && selectionRange) {
-                const sourceValue = data[`${fillStartCell.row}-${fillStartCell.col}`]?.rawValue || ''
-                if (sourceValue && fillStartCell.col !== 0) {
+                const sourceCell = data[`${fillStartCell.row}-${fillStartCell.col}`]
+                const sourceValue = sourceCell?.rawValue
+                
+                // Allow filling if source has value
+                const hasValue = Array.isArray(sourceValue) ? sourceValue.length > 0 : (sourceValue !== '' && sourceValue !== null && sourceValue !== undefined)
+
+                if (hasValue) {
                     setData(prev => {
                         pushHistory(prev)
                         const newData = { ...prev }
@@ -271,14 +444,18 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
 
                         for (let r = minR; r <= maxR; r++) {
                             for (let c = minC; c <= maxC; c++) {
-                                if (c === 0) continue
                                 const key = `${r}-${c}`
                                 const cell = newData[key] || createInitialCell(r, c)
+                                
+                                let newType = cell.type
+                                if (c === 0) newType = 'image'
+                                else newType = isNaN(Number(sourceValue)) ? 'text' : 'number'
+
                                 newData[key] = {
                                     ...cell,
                                     rawValue: sourceValue,
                                     displayValue: sourceValue,
-                                    type: isNaN(Number(sourceValue)) ? 'text' : 'number'
+                                    type: newType
                                 }
                             }
                         }
@@ -363,10 +540,12 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
                 zIndex: 20
             }
 
+            const isActiveRow = selectedCell?.row === r
+
             result.push(
                 <div key={r} className="contents">
                     <div
-                        className="bg-bg-secondary justify-center text-text-secondary border-r border-border-color cursor-default w-8 border-b px-0.5 text-[10px] h-5 flex items-center select-none"
+                        className={`justify-center text-text-secondary border-r border-border-color cursor-default w-8 border-b px-0.5 text-[10px] flex items-center select-none h-full min-h-[40px] ${isActiveRow ? 'bg-blue-50 text-blue-600 font-semibold' : 'bg-bg-secondary'}`}
                         style={rowHeaderStyle}
                         onClick={() => {
                             setSelectedCell({ row: r, col: 0 })
@@ -436,7 +615,7 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
                 {/* Header Row */}
                 <div className="contents">
                     {/* Top Left Corner (Row Nums Header) */}
-                    <div className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold justify-center text-text-secondary cursor-default select-none"
+                    <div className="border-r border-b border-border-color px-0.5 text-[10px] h-10 flex items-center bg-bg-secondary font-semibold justify-center text-text-secondary cursor-default select-none"
                         style={{ position: 'sticky', top: 0, left: 0, zIndex: 40 }}
                     ></div>
                     
@@ -456,7 +635,7 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
 
                         return (
                             <div key={i} 
-                                className="border-r border-b border-border-color px-0.5 text-[10px] h-5 flex items-center bg-bg-secondary font-semibold justify-center text-text-secondary cursor-default select-none group"
+                                className="border-r border-b border-border-color px-0.5 text-[10px] h-10 flex items-center bg-bg-secondary font-semibold justify-center text-text-secondary cursor-default select-none group"
                                 style={stickyHeaderStyle}
                             >
                                 {col}
@@ -477,6 +656,8 @@ const Spreadsheet = memo(function Spreadsheet({ theme, onToggleTheme }) {
                 theme={theme}
                 onToggleTheme={onToggleTheme}
                 connectedCount={connectedDevices.length}
+                installPrompt={installPrompt}
+                onInstall={onInstall}
             />
 
             <DeviceManagerModal

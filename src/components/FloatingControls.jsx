@@ -1,8 +1,24 @@
 import { memo } from 'react'
 
-const FloatingControls = memo(function FloatingControls({ onOpenDevices, theme, onToggleTheme, connectedCount }) {
+const FloatingControls = memo(function FloatingControls({ onOpenDevices, theme, onToggleTheme, connectedCount, installPrompt, onInstall }) {
     return (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 p-1.5 bg-bg-primary/90 backdrop-blur-md border border-border-color rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-all hover:scale-[1.02]">
+            {installPrompt && (
+                <>
+                    <button
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-full text-text-primary hover:bg-bg-secondary transition-colors"
+                        onClick={onInstall}
+                        title="Install App"
+                    >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                    </button>
+                    <div className="w-px h-5 bg-border-color mx-1"></div>
+                </>
+            )}
              <button
                 className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-text-primary text-bg-primary text-sm font-medium hover:opacity-90 transition-all active:scale-95"
                 onClick={onOpenDevices}

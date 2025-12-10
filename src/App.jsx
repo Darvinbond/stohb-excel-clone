@@ -10,14 +10,34 @@ function App() {
   })
 
   const [mode, setMode] = useState(null) // 'provider' or 'receiver'
+  const [installPrompt, setInstallPrompt] = useState(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
 
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+  }, [])
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light')
+  }
+
+  const handleInstallClick = () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    installPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        setInstallPrompt(null)
+      }
+    })
   }
 
   if (!mode) {
@@ -50,7 +70,12 @@ function App() {
   return (
     <div className="h-full flex flex-col">
       {mode === 'provider' ? (
-        <Spreadsheet theme={theme} onToggleTheme={toggleTheme} />
+        <Spreadsheet
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          installPrompt={installPrompt}
+          onInstall={handleInstallClick}
+        />
       ) : (
         <ReceiverView />
       )}
