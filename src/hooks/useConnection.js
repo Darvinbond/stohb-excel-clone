@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Peer from 'peerjs'
 
-// Simple 6-char ID
 function generateShortId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
@@ -10,14 +9,14 @@ export function useConnection(mode = 'provider') {
     const [peerId, setPeerId] = useState('')
     const [connections, setConnections] = useState([])
     const [isConnected, setIsConnected] = useState(false)
+    const [connectionError, setConnectionError] = useState(null) // NEW: Error state
     const peerRef = useRef(null)
     const connectionsRef = useRef([])
 
     useEffect(() => {
-        // PeerJS with DEFAULT cloud (0.peerjs.com) - NO BACKEND NEEDED
         const myId = generateShortId()
         const peer = new Peer(myId, {
-            debug: 2 // Show logs for debugging
+            debug: 1
         })
 
         peerRef.current = peer
@@ -35,14 +34,15 @@ export function useConnection(mode = 'provider') {
 
         peer.on('error', (err) => {
             console.error('❌ Peer error:', err.type, err)
-            // Don't crash on non-fatal errors
+            setConnectionError(`Connection Error: ${err.type}`)
             if (err.type === 'peer-unavailable') {
-                alert('Could not find that device. Check the code and try again.')
+                setConnectionError('Device not found. Check the code.')
             }
         })
 
         peer.on('disconnected', () => {
-            console.log('⚠️ Disconnected from signaling server, attempting reconnect...')
+            console.log('⚠️ Disconnected from cloud')
+            setIsConnected(false)
             peer.reconnect()
         })
 
@@ -56,7 +56,7 @@ export function useConnection(mode = 'provider') {
             console.log('🔗 Connection established with:', conn.peer)
             connectionsRef.current = [...connectionsRef.current, conn]
             setConnections([...connectionsRef.current])
-            setIsConnected(true)
+            setConnectionError(null) // Clear error on success
         })
 
         conn.on('data', (data) => {
@@ -73,22 +73,35 @@ export function useConnection(mode = 'provider') {
         })
 
         conn.on('error', (err) => {
-            console.error('Connection error:', err)
+            console.error('Connection level error:', err)
+            setConnectionError('Connection failed. Please retry.')
         })
     }, [])
 
     const connectToPeer = useCallback((targetId) => {
-        if (!peerRef.current) {
-            console.error('Peer not initialized')
-            return
-        }
+        if (!peerRef.current) return
 
         console.log('📤 Connecting to:', targetId)
-        const conn = peerRef.current.connect(targetId, {
-            reliable: true
-        })
+        setConnectionError(null) // Reset error before trying
 
-        setupConnection(conn)
+        try {
+            const conn = peerRef.current.connect(targetId, {
+                reliable: true
+            })
+            setupConnection(conn)
+
+            // Timeout failsafe
+            setTimeout(() => {
+                if (!conn.open) {
+                    // This is heuristic, but helpful for UI feedback if it hangs
+                    // We don't set error here to avoid race conditions, but UI can use a local timeout.
+                }
+            }, 5000)
+
+        } catch (e) {
+            console.error("Connect exception:", e)
+            setConnectionError("Failed to initiate connection.")
+        }
     }, [setupConnection])
 
     const sendData = useCallback((data, targetPeerId = null) => {
@@ -96,26 +109,19 @@ export function useConnection(mode = 'provider') {
             ? connectionsRef.current.filter(c => c.peer === targetPeerId)
             : connectionsRef.current
 
-        if (targets.length === 0) {
-            console.warn('⚠️ No connections to send data to')
-            return
-        }
-
         targets.forEach(conn => {
             if (conn.open) {
-                console.log('📤 Sending data to', conn.peer)
                 conn.send(data)
-            } else {
-                console.warn('Connection not open:', conn.peer)
             }
         })
     }, [])
 
     return {
         peerId,
-        isConnected,
+        isConnected, // Connected to Cloud
         connectToPeer,
         sendData,
-        connections
+        connections, // Connected Peers
+        connectionError // Expose error
     }
 }

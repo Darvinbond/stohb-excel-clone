@@ -4,141 +4,115 @@ const CodePopup = memo(function CodePopup({ code, onClose, onAssign, currentCell
   return (
     <div className="popup-overlay" onClick={onClose}>
       <div className="popup-content" onClick={e => e.stopPropagation()}>
-        <h3>📱 Pair Device</h3>
-
-        <div className="code-display">
-          {code || 'Loading...'}
+        <div className="popup-header">
+          <h3>📱 Pair Device</h3>
+          <button className="icon-close" onClick={onClose}>&times;</button>
         </div>
 
-        <p className="instruction">
-          Enter this code on your phone's camera app
-        </p>
-
-        {currentCell && (
-          <div className="cell-info">
-            📍 Target: Row {currentCell.row + 1}, Images Column
+        <div className="steps-container">
+          <div className="step">
+            <span className="step-num">1</span>
+            <span>Open app on Phone</span>
           </div>
-        )}
+          <div className="step">
+            <span className="step-num">2</span>
+            <span>Enter this code:</span>
+          </div>
+        </div>
+
+        <div className="code-display">
+          {code || <span className="loading-dots">...</span>}
+        </div>
 
         {connectedDevices.length > 0 ? (
           <div className="connected-section">
-            <p className="connected-label">✅ Connected Devices:</p>
+            <div className="connected-header">
+              <span className="pulse-dot"></span>
+              <span>Device Found!</span>
+            </div>
             {connectedDevices.map((id, i) => (
               <div key={i} className="device-item">
-                <span>📱 {id}</span>
-                <button onClick={() => onAssign(id)}>Assign</button>
+                <span>📱 Device {id.substring(0, 4)}</span>
+                <button className="assign-btn" onClick={() => onAssign(id)}>Connect</button>
               </div>
             ))}
           </div>
         ) : (
-          <div className="status-indicator">
-            <span className="dot"></span> Waiting for device...
+          <div className="waiting-status">
+            <div className="spinner-small"></div>
+            Listening for connection...
           </div>
         )}
 
-        <button className="close-btn" onClick={onClose}>Close</button>
+        <button className="close-btn" onClick={onClose}>Cancel</button>
       </div>
 
       <style>{`
         .popup-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.6);
+          background: rgba(0,0,0,0.7);
+          backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
-          backdrop-filter: blur(4px);
+          z-index: 2000;
+          animation: fadeIn 0.2s ease-out;
         }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
         .popup-content {
-          background: var(--bg-primary, white);
-          padding: 32px;
-          border-radius: 16px;
+          background: white;
+          padding: 24px;
+          border-radius: 20px;
           width: 90%;
-          max-width: 400px;
+          max-width: 360px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
           text-align: center;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-          border: 1px solid var(--border-color, #ddd);
+          font-family: -apple-system, sans-serif;
         }
-        h3 { margin: 0 0 24px 0; font-size: 24px; }
+        
+        .popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .popup-header h3 { margin: 0; font-size: 20px; font-weight: 700; }
+        .icon-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #666; }
+        
+        .steps-container { display: flex; justify-content: center; gap: 20px; margin-bottom: 16px; color: #666; font-size: 14px; }
+        .step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .step-num { background: #eee; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
+        
         .code-display {
-          font-size: 48px;
+          font-size: 42px;
           font-weight: 800;
-          letter-spacing: 6px;
-          margin: 24px 0;
-          font-family: 'SF Mono', 'Monaco', monospace;
-          color: var(--text-primary, #000);
-          background: var(--bg-secondary, #f5f5f5);
-          padding: 20px;
+          letter-spacing: 4px;
+          margin: 10px 0 24px;
+          font-family: 'SF Mono', monospace;
+          color: #111;
+          background: #f3f4f6;
+          padding: 16px;
           border-radius: 12px;
           user-select: all;
+          border: 2px dashed #ddd;
         }
-        .instruction {
-          color: var(--text-secondary, #666);
-          margin-bottom: 16px;
-        }
-        .cell-info {
-            background: #e0f2fe;
-            color: #0369a1;
-            padding: 10px 16px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-weight: 500;
-        }
-        .connected-section {
-            background: #dcfce7;
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-        }
-        .connected-label {
-            margin: 0 0 12px 0;
-            color: #166534;
-            font-weight: 600;
-        }
-        .device-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            background: white;
-            border-radius: 6px;
-            margin-top: 8px;
-        }
-        .device-item button {
-            background: #22c55e;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-        .status-indicator {
+        
+        .waiting-status {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            color: #f59e0b;
-            margin-bottom: 24px;
-            font-weight: 500;
+            gap: 10px;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
         }
-        .dot {
-            width: 10px; height: 10px; background: #f59e0b; border-radius: 50%;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
-        .close-btn {
-          width: 100%;
-          padding: 14px;
-          background: var(--text-primary, #000);
-          color: var(--bg-primary, white);
-          border: none;
-          border-radius: 12px;
-          font-weight: 600;
-          font-size: 16px;
-          cursor: pointer;
-        }
+        .spinner-small { width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #666; border-radius: 50%; animation: spin 1s infinite linear; }
+        
+        .connected-section { background: #ecfdf5; padding: 16px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #a7f3d0; }
+        .connected-header { display: flex; align-items: center; gap: 8px; color: #059669; font-weight: bold; margin-bottom: 12px; justify-content: center; }
+        .pulse-dot { width: 8px; height: 8px; background: #059669; border-radius: 50%; animation: pulse 1.5s infinite; }
+        .device-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .assign-btn { background: #10b981; color: white; border: none; padding: 6px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+        
+        .close-btn { width: 100%; padding: 14px; background: #f3f4f6; color: #4b5563; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .close-btn:hover { background: #e5e7eb; }
       `}</style>
     </div>
   )

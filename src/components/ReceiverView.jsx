@@ -5,47 +5,44 @@ const ReceiverView = () => {
     const [providerCode, setProviderCode] = useState('')
     const [step, setStep] = useState('connect')
     const [assignedCell, setAssignedCell] = useState(null)
-    const [error, setError] = useState('')
+    const [isBusy, setIsBusy] = useState(false) // Loading state
+    const [showHelp, setShowHelp] = useState(false) // Help Modal
     const videoRef = useRef(null)
     const canvasRef = useRef(null)
 
-    const { peerId, connectToPeer, sendData, isConnected, connections } = useConnection('receiver')
+    const { peerId, connectToPeer, sendData, isConnected, connections, connectionError } = useConnection('receiver')
 
     // Watch for successful connection
     useEffect(() => {
         if (connections.length > 0 && step === 'connect') {
-            console.log('Connection established, sending GREET')
+            setIsBusy(false)
             setStep('waiting')
-            // Send GREET after connection is established
-            setTimeout(() => {
-                sendData({ type: 'GREET' })
-            }, 500)
+            // Send GREET immediately
+            setTimeout(() => sendData({ type: 'GREET' }), 100)
         }
     }, [connections, step, sendData])
 
+    // Watch for errors
+    useEffect(() => {
+        if (connectionError) {
+            setIsBusy(false)
+            // Error is displayed in UI via `connectionError` variable
+        }
+    }, [connectionError])
+
     const handleConnect = () => {
         if (providerCode.length >= 4) {
-            setError('')
-            console.log('Attempting to connect to:', providerCode)
+            setIsBusy(true)
             connectToPeer(providerCode.toUpperCase())
+
+            // Failsafe timeout in case PeerJS doesn't report back
+            setTimeout(() => {
+                if (step === 'connect' && connections.length === 0) {
+                    setIsBusy(false)
+                }
+            }, 8000)
         }
     }
-
-    // Listen for assignments
-    useEffect(() => {
-        const handleData = (event) => {
-            const { type, payload } = event.detail.data || {}
-            console.log('Receiver got:', type, payload)
-
-            if (type === 'ASSIGN_CELL') {
-                setAssignedCell(payload)
-                setStep('camera')
-                startCamera()
-            }
-        }
-        window.addEventListener('peer-data', handleData)
-        return () => window.removeEventListener('peer-data', handleData)
-    }, [])
 
     const startCamera = async () => {
         try {
@@ -57,9 +54,23 @@ const ReceiverView = () => {
             }
         } catch (err) {
             console.error("Camera error:", err)
-            setError("Camera access denied. Please allow camera access.")
+            alert("Please allow Camera access in your browser settings.")
         }
     }
+
+    // Listen for assignments
+    useEffect(() => {
+        const handleData = (event) => {
+            const { type, payload } = event.detail.data || {}
+            if (type === 'ASSIGN_CELL') {
+                setAssignedCell(payload)
+                setStep('camera')
+                startCamera()
+            }
+        }
+        window.addEventListener('peer-data', handleData)
+        return () => window.removeEventListener('peer-data', handleData)
+    }, [])
 
     const takePicture = () => {
         if (!videoRef.current || !canvasRef.current || !assignedCell) return
@@ -89,8 +100,6 @@ const ReceiverView = () => {
         context.drawImage(video, 0, 0, width, height)
         const imageData = canvas.toDataURL('image/jpeg', 0.5)
 
-        console.log('Sending image, size:', imageData.length)
-
         sendData({
             type: 'IMAGE_DATA',
             payload: {
@@ -110,42 +119,63 @@ const ReceiverView = () => {
         <div className="receiver-container">
             <div className="header">
                 <h1>📷 Stohb Cam</h1>
-                <div className="status-badge" style={{ background: connections.length > 0 ? '#4ade80' : '#f87171' }}>
-                    {connections.length > 0 ? '🟢 Connected' : '🔴 Not Connected'}
-                </div>
+                <div onClick={() => setShowHelp(!showHelp)} className="help-icon">?</div>
             </div>
 
             {step === 'connect' && (
                 <div className="connect-card">
-                    <h2>Pair Device</h2>
-                    <p>Enter the code from the spreadsheet</p>
-                    <input
-                        type="text"
-                        value={providerCode}
-                        onChange={(e) => setProviderCode(e.target.value.toUpperCase())}
-                        placeholder="ENTER CODE"
-                        maxLength={6}
-                        className="code-input"
-                        autoCapitalize="characters"
-                    />
-                    {error && <p className="error">{error}</p>}
-                    <button
-                        className="connect-btn"
-                        onClick={handleConnect}
-                        disabled={providerCode.length < 4}
-                    >
-                        Connect
-                    </button>
-                    <p className="hint">Your ID: {peerId || '...'}</p>
+                    {showHelp ? (
+                        <div className="help-content">
+                            <h3>How to Connect</h3>
+                            <ol>
+                                <li>Open <b>Stohb Sheet</b> on Laptop.</li>
+                                <li>Click the <b>+</b> button on any Image cell.</li>
+                                <li>Type the <b>6-character Code</b> shown there into the box below.</li>
+                                <li>Click <b>Connect</b>.</li>
+                            </ol>
+                            <button className="close-help-btn" onClick={() => setShowHelp(false)}>Got it</button>
+                        </div>
+                    ) : (
+                        <>
+                            <h2>Pair Device</h2>
+                            <p className="subtext">Enter code from Spreadsheet</p>
+
+                            <input
+                                type="text"
+                                value={providerCode}
+                                onChange={(e) => setProviderCode(e.target.value.toUpperCase())}
+                                placeholder="CODE"
+                                maxLength={6}
+                                className={`code-input ${connectionError ? 'error-border' : ''}`}
+                                autoCapitalize="characters"
+                                disabled={isBusy}
+                            />
+
+                            {connectionError && <p className="error-msg">⚠️ {connectionError}</p>}
+
+                            <button
+                                className={`connect-btn ${isBusy ? 'loading' : ''}`}
+                                onClick={handleConnect}
+                                disabled={providerCode.length < 4 || isBusy}
+                            >
+                                {isBusy ? 'Connecting...' : 'Connect'}
+                            </button>
+
+                            <div className="status-footer">
+                                <span className={`dot ${isConnected ? 'green' : 'red'}`}></span>
+                                {isConnected ? 'Server Connected' : 'Connecting to Cloud...'}
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
             {step === 'waiting' && (
                 <div className="waiting-screen">
                     <div className="spinner"></div>
-                    <h2>✅ Connected!</h2>
-                    <p>Waiting for cell assignment...</p>
-                    <small>Click an Image cell on the spreadsheet</small>
+                    <h2>Connected!</h2>
+                    <p>Waiting for assignment...</p>
+                    <small>Go back to Spreadsheet and click "Assign" if needed</small>
                 </div>
             )}
 
@@ -155,7 +185,7 @@ const ReceiverView = () => {
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                     <div className="camera-overlay">
                         <div className="counter-pill">
-                            📸 {assignedCell?.currentCount || 0} / 4
+                            {(assignedCell?.currentCount || 0)} / 4
                         </div>
                     </div>
                     <div className="camera-controls">
@@ -169,25 +199,44 @@ const ReceiverView = () => {
             )}
 
             <style>{`
-                .receiver-container { background: #111; color: white; height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
-                .header { padding: 16px; display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; }
-                .header h1 { margin: 0; font-size: 20px; }
-                .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-                .connect-card, .waiting-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
-                .code-input { font-size: 32px; padding: 16px; margin: 24px 0; text-align: center; text-transform: uppercase; width: 240px; border-radius: 12px; border: 2px solid #333; background: #222; color: white; letter-spacing: 8px; }
-                .connect-btn { padding: 16px 48px; font-size: 18px; background: white; color: black; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; }
-                .connect-btn:disabled { opacity: 0.5; }
-                .error { color: #f87171; margin: 8px 0; }
-                .hint { margin-top: 24px; color: #666; font-size: 12px; }
-                .spinner { width: 48px; height: 48px; border: 4px solid #333; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 24px; }
+                .receiver-container { background: #0a0a0a; color: white; height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
+                .header { padding: 16px; display: flex; justify-content: space-between; align-items: center; background: #111; border-bottom: 1px solid #222; }
+                .header h1 { margin: 0; font-size: 18px; font-weight: 700; }
+                .help-icon { width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; }
+                
+                .connect-card, .waiting-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+                
+                .help-content { text-align: left; background: #222; padding: 20px; border-radius: 12px; }
+                .help-content ol { padding-left: 20px; line-height: 1.6; }
+                .close-help-btn { margin-top: 16px; width: 100%; padding: 12px; background: white; color: black; border: none; border-radius: 8px; font-weight: bold; }
+                
+                .subtext { color: #888; margin-top: -10px; margin-bottom: 30px; }
+                
+                .code-input { font-size: 32px; padding: 16px; width: 100%; max-width: 280px; text-align: center; text-transform: uppercase; background: #1a1a1a; border: 2px solid #333; color: white; border-radius: 16px; letter-spacing: 4px; margin-bottom: 24px; transition: all 0.2s; }
+                .code-input:focus { border-color: #4ade80; outline: none; }
+                .code-input.error-border { border-color: #f87171; }
+                
+                .connect-btn { width: 100%; max-width: 280px; padding: 16px; font-size: 18px; font-weight: 700; border-radius: 16px; border: none; background: white; color: black; cursor: pointer; transition: all 0.2s; }
+                .connect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+                .connect-btn.loading { background: #333; color: #fff; }
+                
+                .error-msg { color: #f87171; background: rgba(248, 113, 113, 0.1); padding: 10px; border-radius: 8px; font-size: 14px; margin-bottom: 20px; width: 100%; max-width: 280px; }
+                
+                .status-footer { margin-top: 40px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #666; }
+                .dot { width: 8px; height: 8px; border-radius: 50%; }
+                .dot.green { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+                .dot.red { background: #f87171; }
+                
+                .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
                 @keyframes spin { to { transform: rotate(360deg); } }
+                
                 .camera-interface { flex: 1; position: relative; background: black; }
                 .camera-feed { width: 100%; height: 100%; object-fit: cover; }
                 .camera-overlay { position: absolute; top: 20px; right: 20px; }
-                .counter-pill { background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 20px; font-weight: bold; }
-                .camera-controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: center; }
-                .shutter-btn { width: 80px; height: 80px; border-radius: 50%; background: white; border: 6px solid rgba(255,255,255,0.3); cursor: pointer; transition: transform 0.1s; }
-                .shutter-btn:active { transform: scale(0.9); }
+                .counter-pill { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); padding: 8px 16px; border-radius: 20px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
+                .camera-controls { position: absolute; bottom: 40px; left: 0; right: 0; display: flex; justify-content: center; }
+                .shutter-btn { width: 72px; height: 72px; border-radius: 50%; background: white; border: 4px solid rgba(0,0,0,0.1); box-shadow: 0 0 20px rgba(0,0,0,0.3); }
+                .shutter-btn:active { transform: scale(0.95); }
                 .shutter-btn:disabled { opacity: 0.5; }
             `}</style>
         </div>
