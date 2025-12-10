@@ -136,48 +136,69 @@ const ReceiverView = () => {
             </div>
 
             {step === 'connect' && (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
                     {showHelp ? (
-                        <div className="max-w-md">
-                            <h3 className="text-xl font-bold mb-4">How to Connect</h3>
-                            <ol className="text-left space-y-2 mb-6">
-                                <li>Open <b>Stohb Sheet</b> on Laptop.</li>
-                                <li>Click the <b>+</b> button on any Image cell.</li>
-                                <li>Enter the <b>Code</b> below.</li>
+                        <div className="max-w-xs w-full bg-[#1a1a1a] p-6 rounded-2xl border border-[#333]">
+                            <h3 className="text-lg font-bold mb-4 text-white">How to Connect</h3>
+                            <ol className="text-left space-y-3 mb-6 text-sm text-gray-400 list-decimal list-inside">
+                                <li>Open <span className="text-white font-medium">Stohb Sheet</span> on Laptop.</li>
+                                <li>Click the <span className="text-white font-medium">Devices</span> button.</li>
+                                <li>Enter the <span className="text-white font-medium">Pairing Code</span> shown.</li>
                             </ol>
-                            <button className="w-full py-3 bg-white text-black font-semibold rounded-xl" onClick={() => setShowHelp(false)}>Got it</button>
+                            <button
+                                className="w-full py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-100 transition-colors text-sm"
+                                onClick={() => setShowHelp(false)}
+                            >
+                                Got it
+                            </button>
                         </div>
                     ) : (
-                        <>
-                            <h2 className="text-2xl font-bold mb-2">Pair Device</h2>
-                            <p className="text-gray-400 mb-6">Enter code from Spreadsheet</p>
+                        <div className="w-full max-w-xs flex flex-col items-center">
+                            <h2 className="text-2xl font-bold mb-2 tracking-tight">Pair Device</h2>
+                            <p className="text-gray-500 mb-8 text-sm">Enter the code displayed on your spreadsheet</p>
 
-                            <input
-                                type="text"
-                                value={providerCode}
-                                onChange={(e) => setProviderCode(e.target.value.toUpperCase())}
-                                placeholder="CODE"
-                                maxLength={6}
-                                className={`text-[32px] p-4 w-full max-w-[280px] text-center uppercase bg-[#1a1a1a] border-2 ${connectionError ? 'border-red-500' : 'border-[#333]'} text-white rounded-2xl mb-6`}
-                                autoCapitalize="characters"
-                                disabled={isBusy}
-                            />
+                            <div className="relative w-full mb-4 group">
+                                <input
+                                    type="text"
+                                    value={providerCode}
+                                    onChange={(e) => setProviderCode(e.target.value.toUpperCase())}
+                                    placeholder="CODE"
+                                    maxLength={6}
+                                    className={`w-full text-3xl font-mono tracking-[0.2em] p-4 text-center uppercase bg-[#0a0a0a] border ${connectionError ? 'border-red-500/50 focus:border-red-500' : 'border-[#333] focus:border-white'} text-white rounded-xl transition-all outline-none placeholder:text-[#333]`}
+                                    autoCapitalize="characters"
+                                    disabled={isBusy}
+                                />
+                            </div>
 
-                            {connectionError && <p className="text-red-400 mb-5">⚠️ {connectionError}</p>}
+                            {connectionError && (
+                                <div className="flex items-center gap-2 text-red-400 text-xs mb-4 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">
+                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                    {connectionError}
+                                </div>
+                            )}
 
                             <button
-                                className={`w-full max-w-[280px] p-4 text-lg font-bold rounded-2xl border-none ${isBusy ? 'bg-[#333] text-white' : 'bg-white text-black'} cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+                                className={`w-full py-4 text-sm font-medium rounded-xl border transition-all active:scale-[0.98] ${
+                                    isBusy
+                                        ? 'bg-[#222] border-[#333] text-gray-500 cursor-wait'
+                                        : 'bg-white text-black border-transparent hover:bg-gray-100 shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
                                 onClick={handleConnect}
                                 disabled={providerCode.length < 4 || isBusy}
                             >
-                                {isBusy ? 'Connecting...' : 'Connect'}
+                                {isBusy ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        Connecting...
+                                    </span>
+                                ) : 'Connect Device'}
                             </button>
 
-                            <div className="mt-6 flex items-center gap-2 text-sm">
-                                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                            <div className="mt-8 flex items-center gap-2 text-[10px] text-gray-600 font-medium uppercase tracking-wider">
+                                <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`}></span>
                                 {isConnected ? 'Server Connected' : 'Connecting to Cloud...'}
                             </div>
-                        </>
+                        </div>
                     )}
                 </div>
             )}

@@ -1,4 +1,4 @@
-import { useRef, useEffect, memo } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 
 const Cell = memo(function Cell({
     row,
@@ -21,26 +21,50 @@ const Cell = memo(function Cell({
     style: customStyle = {}
 }) {
     const inputRef = useRef(null)
+    const [inputValue, setInputValue] = useState(value)
 
+    // Sync local state only when entering edit mode or when value changes while NOT editing
+    // This prevents external prop updates (like re-renders) from overwriting local typing
     useEffect(() => {
-        if (isEditing && inputRef.current) {
-            inputRef.current.focus()
-            // Move cursor to end of text
-            const len = inputRef.current.value.length
-            inputRef.current.setSelectionRange(len, len)
+        if (isEditing) {
+            setInputValue(value)
+            // Focus logic
+            if (inputRef.current) {
+                // We need a small timeout to allow the render to complete if switching modes
+                setTimeout(() => {
+                    if (inputRef.current) {
+                        inputRef.current.focus()
+                        const len = inputRef.current.value.length
+                        inputRef.current.setSelectionRange(len, len)
+                    }
+                }, 0)
+            }
         }
     }, [isEditing])
 
-    const className = `
-        border-r border-b border-border-color px-0.5 text-[11px] flex items-center
-        whitespace-nowrap overflow-hidden relative select-none text-text-primary cursor-cell
-        bg-bg-primary
-        ${type === 'image' && value && value.length > 0 ? 'h-auto min-h-[100px]' : 'h-10'}
-        ${isSelected ? 'shadow-[inset_0_0_0_2px_#0ea5e9] z-10 !bg-selection-color' : ''}
-        ${isEditing ? 'p-0 z-20 shadow-[0_0_0_2px_#0ea5e9]' : ''}
-        ${inRange ? '!bg-selection-color' : ''}
-        ${type === 'image' ? 'p-0 justify-center' : ''}
-    `.trim().replace(/\s+/g, ' ')
+    let className = 'border-r border-b border-border-color px-0.5 text-[11px] flex items-center whitespace-nowrap overflow-hidden relative select-none text-text-primary cursor-cell bg-bg-primary'
+    
+    if (type === 'image' && value && value.length > 0) {
+        className += ' h-auto min-h-[32px]'
+    } else {
+        className += ' min-h-[20px] h-full'
+    }
+
+    if (isSelected) {
+        className += ' shadow-[inset_0_0_0_2px_var(--selection-border)] z-10 !bg-selection-color'
+    }
+
+    if (isEditing) {
+        className += ' p-0 z-20 shadow-[0_0_0_2px_var(--selection-border)]'
+    }
+
+    if (inRange) {
+        className += ' !bg-selection-color'
+    }
+
+    if (type === 'image') {
+        className += ' p-0 justify-center'
+    }
 
     const style = {
         width: cellWidth,
@@ -52,14 +76,23 @@ const Cell = memo(function Cell({
             <div className={className} style={style}>
                 <input
                     ref={inputRef}
-                    value={value}
-                    onChange={(e) => onChange(row, col, e.target.value)}
-                    onBlur={() => onClick(-1, -1)}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onBlur={() => {
+                        if (inputValue !== value) {
+                            onChange(row, col, inputValue)
+                        }
+                        onClick(-1, -1)
+                    }}
                     onKeyDown={(e) => {
                         e.stopPropagation()
                         if (e.key === 'Enter') {
+                            if (inputValue !== value) {
+                                onChange(row, col, inputValue)
+                            }
                             onClick(-1, -1) // Stop editing
                         } else if (e.key === 'Escape') {
+                            setInputValue(value) // Revert
                             onClick(-1, -1) // Cancel editing
                         }
                     }}
@@ -131,7 +164,7 @@ const Cell = memo(function Cell({
             {/* Fill handle if selected */}
             {isSelected && (
                 <div
-                    className="absolute -bottom-[2px] -right-[2px] w-2 h-2 bg-[#1a73e8] cursor-crosshair z-30 border border-white"
+                    className="absolute -bottom-[2px] -right-[2px] w-2 h-2 bg-selection-border cursor-crosshair z-30 border border-bg-primary"
                     onMouseDown={(e) => {
                         e.stopPropagation()
                         onFillHandleMouseDown?.(row, col, e)
