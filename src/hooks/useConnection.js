@@ -9,14 +9,21 @@ export function useConnection(mode = 'provider') {
     const [peerId, setPeerId] = useState('')
     const [connections, setConnections] = useState([])
     const [isConnected, setIsConnected] = useState(false)
-    const [connectionError, setConnectionError] = useState(null) // NEW: Error state
+    const [connectionError, setConnectionError] = useState(null)
     const peerRef = useRef(null)
     const connectionsRef = useRef([])
 
     useEffect(() => {
         const myId = generateShortId()
+        // Add robust public STUN servers to punch through firewalls
         const peer = new Peer(myId, {
-            debug: 1
+            debug: 1,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
         })
 
         peerRef.current = peer
@@ -56,7 +63,7 @@ export function useConnection(mode = 'provider') {
             console.log('🔗 Connection established with:', conn.peer)
             connectionsRef.current = [...connectionsRef.current, conn]
             setConnections([...connectionsRef.current])
-            setConnectionError(null) // Clear error on success
+            setConnectionError(null)
         })
 
         conn.on('data', (data) => {
@@ -82,7 +89,7 @@ export function useConnection(mode = 'provider') {
         if (!peerRef.current) return
 
         console.log('📤 Connecting to:', targetId)
-        setConnectionError(null) // Reset error before trying
+        setConnectionError(null)
 
         try {
             const conn = peerRef.current.connect(targetId, {
@@ -90,11 +97,9 @@ export function useConnection(mode = 'provider') {
             })
             setupConnection(conn)
 
-            // Timeout failsafe
             setTimeout(() => {
                 if (!conn.open) {
-                    // This is heuristic, but helpful for UI feedback if it hangs
-                    // We don't set error here to avoid race conditions, but UI can use a local timeout.
+                    // Fail silently here, error listener handles it
                 }
             }, 5000)
 
@@ -118,10 +123,10 @@ export function useConnection(mode = 'provider') {
 
     return {
         peerId,
-        isConnected, // Connected to Cloud
+        isConnected,
         connectToPeer,
         sendData,
-        connections, // Connected Peers
-        connectionError // Expose error
+        connections,
+        connectionError
     }
 }
